@@ -2,6 +2,7 @@ import cors from "cors";
 import express from "express";
 import { env } from "./config/env.js";
 import { errorHandler } from "./middleware/error-handler.js";
+import { departmentRouter } from "./modules/departments/department.routes.js";
 import { peopleRouter } from "./modules/people/people.routes.js";
 import { projectRouter } from "./modules/projects/project.routes.js";
 import { projectTaskRouter, taskRouter } from "./modules/tasks/task.routes.js";
@@ -16,6 +17,7 @@ app.get("/api/health", (_req, res) => {
 });
 
 app.use("/api/people", peopleRouter);
+app.use("/api/departments", departmentRouter);
 app.use("/api/projects", projectRouter);
 app.use("/api/projects/:projectId/tasks", projectTaskRouter);
 app.use("/api/tasks", taskRouter);

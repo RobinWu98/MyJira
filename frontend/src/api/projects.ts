@@ -4,6 +4,7 @@ import type { ProjectDetail, ProjectSummary } from "../types";
 export type ProjectPayload = {
   name: string;
   description?: string | null;
+  startDate?: string | null;
   createdByPersonId: number;
 };
 

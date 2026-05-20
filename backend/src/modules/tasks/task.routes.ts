@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   createTask,
   deleteTask,
+  getTaskReport,
   listTasks,
   reorderTasks,
   updateTask
@@ -10,12 +11,22 @@ import {
   createTaskSchema,
   projectTaskParamsSchema,
   reorderTasksSchema,
+  taskReportQuerySchema,
   taskIdParamsSchema,
   updateTaskSchema
 } from "./task.schemas.js";
 
 export const taskRouter = Router();
 export const projectTaskRouter = Router({ mergeParams: true });
+
+taskRouter.get("/report", async (req, res, next) => {
+  try {
+    const query = taskReportQuerySchema.parse(req.query);
+    res.json(await getTaskReport(query));
+  } catch (error) {
+    next(error);
+  }
+});
 
 projectTaskRouter.get("/", async (req, res, next) => {
   try {

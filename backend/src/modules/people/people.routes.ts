@@ -6,6 +6,7 @@ export const peopleRouter = Router();
 peopleRouter.get("/", async (_req, res, next) => {
   try {
     const people = await prisma.person.findMany({
+      include: { department: true },
       orderBy: { name: "asc" }
     });
 

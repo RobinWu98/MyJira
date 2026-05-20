@@ -6,6 +6,14 @@ import type { z } from "zod";
 
 const projectListInclude = {
   createdBy: true,
+  tasks: {
+    select: {
+      id: true,
+      status: true,
+      completedAt: true,
+      updatedAt: true
+    }
+  },
   _count: {
     select: { tasks: true }
   }
@@ -14,7 +22,7 @@ const projectListInclude = {
 const projectDetailInclude = {
   createdBy: true,
   tasks: {
-    include: { assignedPerson: true },
+    include: { assignedPerson: true, department: true },
     orderBy: [{ status: "asc" }, { sortOrder: "asc" }]
   }
 } satisfies Prisma.ProjectInclude;
@@ -54,6 +62,7 @@ export async function createProject(input: z.infer<typeof createProjectSchema>) 
     data: {
       name: input.name,
       description: input.description,
+      startDate: input.startDate,
       createdByPersonId: input.createdByPersonId
     },
     include: projectListInclude

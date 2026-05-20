@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Person, ProjectSummary } from "../../types";
+import { formatDateInput } from "../../utils/labels";
 import { Button } from "../ui/Button";
 
 type ProjectFormProps = {
@@ -8,17 +9,30 @@ type ProjectFormProps = {
   onSubmit: (payload: {
     name: string;
     description: string | null;
+    startDate: string | null;
     createdByPersonId: number;
   }) => void;
   isSubmitting: boolean;
 };
 
-export function ProjectForm({ people, project, onSubmit, isSubmitting }: ProjectFormProps) {
+export function ProjectForm({
+  people,
+  project,
+  onSubmit,
+  isSubmitting
+}: ProjectFormProps) {
   const [name, setName] = useState(project?.name ?? "");
   const [description, setDescription] = useState(project?.description ?? "");
+  const [startDate, setStartDate] = useState(formatDateInput(project?.startDate));
   const [createdByPersonId, setCreatedByPersonId] = useState(
     project?.createdByPersonId ?? people[0]?.id ?? 0
   );
+
+  useEffect(() => {
+    if (!createdByPersonId && people[0]) {
+      setCreatedByPersonId(people[0].id);
+    }
+  }, [createdByPersonId, people]);
 
   return (
     <form
@@ -28,6 +42,7 @@ export function ProjectForm({ people, project, onSubmit, isSubmitting }: Project
         onSubmit({
           name,
           description: description.trim() || null,
+          startDate: startDate || null,
           createdByPersonId
         });
       }}
@@ -66,6 +81,18 @@ export function ProjectForm({ people, project, onSubmit, isSubmitting }: Project
           ))}
         </select>
       </label>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="block">
+          <span className="text-sm font-medium">Start date</span>
+          <input
+            className="focus-ring mt-1 w-full rounded-md border border-line px-3 py-2"
+            type="date"
+            value={startDate}
+            onChange={(event) => setStartDate(event.target.value)}
+          />
+        </label>
+      </div>
 
       <div className="flex justify-end">
         <Button type="submit" disabled={isSubmitting || !people.length}>

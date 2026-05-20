@@ -1,27 +1,32 @@
 import { useState } from "react";
-import type { Person, Task, TaskPriority, TaskStatus } from "../../types";
-import { priorities, priorityLabels, statuses, statusLabels } from "../../utils/labels";
+import type { Department, Person, Task, TaskPriority, TaskStatus } from "../../types";
+import { formatDateInput, priorities, priorityLabels, statuses, statusLabels } from "../../utils/labels";
 import { Button } from "../ui/Button";
 
 type TaskFormProps = {
   people: Person[];
+  departments: Department[];
   task?: Task;
   onSubmit: (payload: {
     title: string;
     description: string | null;
+    departmentId: number | null;
     assignedPersonId: number | null;
     status: TaskStatus;
     priority: TaskPriority;
+    startDate: string | null;
   }) => void;
   isSubmitting: boolean;
 };
 
-export function TaskForm({ people, task, onSubmit, isSubmitting }: TaskFormProps) {
+export function TaskForm({ people, departments, task, onSubmit, isSubmitting }: TaskFormProps) {
   const [title, setTitle] = useState(task?.title ?? "");
   const [description, setDescription] = useState(task?.description ?? "");
+  const [departmentId, setDepartmentId] = useState(task?.departmentId ?? 0);
   const [assignedPersonId, setAssignedPersonId] = useState(task?.assignedPersonId ?? 0);
   const [status, setStatus] = useState<TaskStatus>(task?.status ?? "TODO");
   const [priority, setPriority] = useState<TaskPriority>(task?.priority ?? "NORMAL");
+  const [startDate, setStartDate] = useState(formatDateInput(task?.startDate));
 
   return (
     <form
@@ -31,9 +36,11 @@ export function TaskForm({ people, task, onSubmit, isSubmitting }: TaskFormProps
         onSubmit({
           title,
           description: description.trim() || null,
+          departmentId: departmentId || null,
           assignedPersonId: assignedPersonId || null,
           status,
-          priority
+          priority,
+          startDate: startDate || null
         });
       }}
     >
@@ -56,7 +63,23 @@ export function TaskForm({ people, task, onSubmit, isSubmitting }: TaskFormProps
         />
       </label>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="space-y-4">
+        <label className="block">
+          <span className="text-sm font-medium">Department</span>
+          <select
+            className="focus-ring mt-1 w-full rounded-md border border-line px-3 py-2"
+            value={departmentId}
+            onChange={(event) => setDepartmentId(Number(event.target.value))}
+          >
+            <option value={0}>No department</option>
+            {departments.map((department) => (
+              <option key={department.id} value={department.id}>
+                {department.name}
+              </option>
+            ))}
+          </select>
+        </label>
+
         <label className="block">
           <span className="text-sm font-medium">Assigned person</span>
           <select
@@ -101,6 +124,16 @@ export function TaskForm({ people, task, onSubmit, isSubmitting }: TaskFormProps
               </option>
             ))}
           </select>
+        </label>
+
+        <label className="block">
+          <span className="text-sm font-medium">Start date</span>
+          <input
+            className="focus-ring mt-1 w-full rounded-md border border-line px-3 py-2"
+            type="date"
+            value={startDate}
+            onChange={(event) => setStartDate(event.target.value)}
+          />
         </label>
       </div>
 

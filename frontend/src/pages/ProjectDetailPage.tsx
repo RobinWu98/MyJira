@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Edit, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { fetchDepartments } from "../api/departments";
 import { fetchPeople } from "../api/people";
 import { deleteProject, fetchProject, updateProject } from "../api/projects";
 import { createTask, deleteTask, reorderTasks, updateTask } from "../api/tasks";
@@ -32,6 +33,11 @@ export function ProjectDetailPage() {
   const peopleQuery = useQuery({
     queryKey: ["people"],
     queryFn: fetchPeople
+  });
+
+  const departmentsQuery = useQuery({
+    queryKey: ["departments"],
+    queryFn: fetchDepartments
   });
 
   const updateProjectMutation = useMutation({
@@ -88,6 +94,7 @@ export function ProjectDetailPage() {
 
   const project = projectQuery.data;
   const people = peopleQuery.data ?? [];
+  const departments = departmentsQuery.data ?? [];
 
   return (
     <main className="min-h-screen bg-surface px-4 py-6 sm:px-6 lg:px-8">
@@ -116,6 +123,9 @@ export function ProjectDetailPage() {
                   </p>
                   <div className="mt-4 flex flex-wrap gap-3 text-sm text-slate-500">
                     <span>Created by {project.createdBy.name}</span>
+                    <span>
+                      Start {project.startDate ? formatDate(project.startDate) : "not set"}
+                    </span>
                     <span>Created {formatDate(project.createdAt)}</span>
                     <span>Updated {formatDate(project.updatedAt)}</span>
                   </div>
@@ -182,6 +192,7 @@ export function ProjectDetailPage() {
         <Modal title="Create task" onClose={() => setIsTaskFormOpen(false)}>
           <TaskForm
             people={people}
+            departments={departments}
             isSubmitting={createTaskMutation.isPending}
             onSubmit={(payload) => createTaskMutation.mutate(payload)}
           />
@@ -192,6 +203,7 @@ export function ProjectDetailPage() {
         <Modal title="Edit task" onClose={() => setEditingTask(null)}>
           <TaskForm
             people={people}
+            departments={departments}
             task={editingTask}
             isSubmitting={updateTaskMutation.isPending}
             onSubmit={(payload) => updateTaskMutation.mutate({ id: editingTask.id, payload })}

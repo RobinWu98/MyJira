@@ -8,14 +8,27 @@ datasource db {
 }
 
 model Person {
-  id        Int      @id @default(autoincrement())
-  name      String
-  email     String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           Int      @id @default(autoincrement())
+  departmentId Int?
+  name         String
+  email        String   @unique
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
+  department      Department? @relation(fields: [departmentId], references: [id])
   projectsCreated Project[] @relation("ProjectCreator")
   assignedTasks    Task[]   @relation("TaskAssignee")
+}
+
+model Department {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  people   Person[]
+  tasks    Task[]
 }
 
 model Project {
@@ -23,6 +36,7 @@ model Project {
   name              String
   description       String?
   createdByPersonId Int
+  startDate         DateTime?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
@@ -33,16 +47,20 @@ model Project {
 model Task {
   id               Int          @id @default(autoincrement())
   projectId        Int
+  departmentId     Int?
   title            String
   description      String?
   assignedPersonId Int?
   status           TaskStatus   @default(TODO)
   priority         TaskPriority @default(NORMAL)
   sortOrder        Int
+  startDate        DateTime?
+  completedAt      DateTime?
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
 
   project        Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  department     Department? @relation(fields: [departmentId], references: [id])
   assignedPerson Person? @relation("TaskAssignee", fields: [assignedPersonId], references: [id])
 
   @@index([projectId, status, sortOrder])

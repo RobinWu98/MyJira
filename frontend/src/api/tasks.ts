@@ -1,12 +1,14 @@
 import { apiRequest } from "./client";
-import type { Task, TaskPriority, TaskStatus } from "../types";
+import type { GroupBy, Task, TaskPriority, TaskReport, TaskStatus } from "../types";
 
 export type TaskPayload = {
   title: string;
   description?: string | null;
+  departmentId?: number | null;
   assignedPersonId?: number | null;
   status: TaskStatus;
   priority: TaskPriority;
+  startDate?: string | null;
 };
 
 export type ReorderTaskPayload = {
@@ -44,4 +46,30 @@ export function reorderTasks(projectId: number, tasks: ReorderTaskPayload[]) {
     method: "PATCH",
     body: JSON.stringify({ tasks })
   });
+}
+
+export type TaskReportQuery = {
+  groupBy?: GroupBy | "";
+  priority?: TaskPriority | "";
+  status?: TaskStatus | "";
+  statusNot?: TaskStatus | "";
+  departmentId?: number | "";
+  assignedPersonId?: number | "";
+  startDateFrom?: string;
+  startDateTo?: string;
+  incompleteForMoreThanDays?: number | "";
+  sort?: string;
+};
+
+export function fetchTaskReport(query: TaskReportQuery) {
+  const params = new URLSearchParams();
+
+  Object.entries(query).forEach(([key, value]) => {
+    if (value !== undefined && value !== "") {
+      params.set(key, String(value));
+    }
+  });
+
+  const search = params.toString();
+  return apiRequest<TaskReport>(`/tasks/report${search ? `?${search}` : ""}`);
 }

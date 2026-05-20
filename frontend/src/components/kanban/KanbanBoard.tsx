@@ -19,7 +19,13 @@ import { CSS } from "@dnd-kit/utilities";
 import { Pencil, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { Task, TaskStatus } from "../../types";
-import { priorityLabels, statuses, statusLabels } from "../../utils/labels";
+import {
+  priorityBadgeClasses,
+  priorityLabels,
+  statusBadgeClasses,
+  statuses,
+  statusLabels
+} from "../../utils/labels";
 import { Button } from "../ui/Button";
 
 type BoardState = Record<TaskStatus, Task[]>;
@@ -190,7 +196,11 @@ function KanbanColumn({
   return (
     <section ref={setNodeRef} className="min-h-80 rounded-lg border border-line bg-white p-3">
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="font-semibold">{statusLabels[status]}</h3>
+        <h3
+          className={`rounded-full border px-2 py-1 text-sm font-semibold ${statusBadgeClasses[status]}`}
+        >
+          {statusLabels[status]}
+        </h3>
         <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
           {tasks.length}
         </span>
@@ -247,9 +257,9 @@ function TaskCard({
     >
       <div className="flex items-start justify-between gap-2">
         <div>
-          <h4 className="font-medium leading-snug">{task.title}</h4>
+          <h4 className="text-left font-medium leading-snug">{task.title}</h4>
           {task.description ? (
-            <p className="mt-1 line-clamp-2 text-sm text-slate-500">{task.description}</p>
+            <p className="mt-[20px] line-clamp-2 text-left text-sm text-slate-500">{task.description}</p>
           ) : null}
         </div>
         <div className="flex shrink-0 gap-1">
@@ -277,12 +287,15 @@ function TaskCard({
           </Button>
         </div>
       </div>
-      <div className="mt-3 flex flex-wrap gap-2 text-xs">
-        <span className="rounded-full bg-blue-50 px-2 py-1 text-blue-700">
+      <div className="mt-[20px] flex flex-wrap justify-start gap-2 text-xs">
+        <span className={`rounded-full border px-2 py-1 ${priorityBadgeClasses[task.priority]}`}>
           {priorityLabels[task.priority]}
         </span>
         <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-600">
           {task.assignedPerson?.name ?? "Unassigned"}
+        </span>
+        <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-600">
+          {task.department?.name ?? "No department"}
         </span>
       </div>
     </article>
