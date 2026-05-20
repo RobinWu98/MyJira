@@ -1,0 +1,114 @@
+import { useState } from "react";
+import type { Person, Task, TaskPriority, TaskStatus } from "../../types";
+import { priorities, priorityLabels, statuses, statusLabels } from "../../utils/labels";
+import { Button } from "../ui/Button";
+
+type TaskFormProps = {
+  people: Person[];
+  task?: Task;
+  onSubmit: (payload: {
+    title: string;
+    description: string | null;
+    assignedPersonId: number | null;
+    status: TaskStatus;
+    priority: TaskPriority;
+  }) => void;
+  isSubmitting: boolean;
+};
+
+export function TaskForm({ people, task, onSubmit, isSubmitting }: TaskFormProps) {
+  const [title, setTitle] = useState(task?.title ?? "");
+  const [description, setDescription] = useState(task?.description ?? "");
+  const [assignedPersonId, setAssignedPersonId] = useState(task?.assignedPersonId ?? 0);
+  const [status, setStatus] = useState<TaskStatus>(task?.status ?? "TODO");
+  const [priority, setPriority] = useState<TaskPriority>(task?.priority ?? "NORMAL");
+
+  return (
+    <form
+      className="space-y-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSubmit({
+          title,
+          description: description.trim() || null,
+          assignedPersonId: assignedPersonId || null,
+          status,
+          priority
+        });
+      }}
+    >
+      <label className="block">
+        <span className="text-sm font-medium">Task title</span>
+        <input
+          className="focus-ring mt-1 w-full rounded-md border border-line px-3 py-2"
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+          required
+        />
+      </label>
+
+      <label className="block">
+        <span className="text-sm font-medium">Description</span>
+        <textarea
+          className="focus-ring mt-1 min-h-24 w-full rounded-md border border-line px-3 py-2"
+          value={description}
+          onChange={(event) => setDescription(event.target.value)}
+        />
+      </label>
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <label className="block">
+          <span className="text-sm font-medium">Assigned person</span>
+          <select
+            className="focus-ring mt-1 w-full rounded-md border border-line px-3 py-2"
+            value={assignedPersonId}
+            onChange={(event) => setAssignedPersonId(Number(event.target.value))}
+          >
+            <option value={0}>Unassigned</option>
+            {people.map((person) => (
+              <option key={person.id} value={person.id}>
+                {person.name}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="block">
+          <span className="text-sm font-medium">Status</span>
+          <select
+            className="focus-ring mt-1 w-full rounded-md border border-line px-3 py-2"
+            value={status}
+            onChange={(event) => setStatus(event.target.value as TaskStatus)}
+          >
+            {statuses.map((value) => (
+              <option key={value} value={value}>
+                {statusLabels[value]}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="block">
+          <span className="text-sm font-medium">Priority</span>
+          <select
+            className="focus-ring mt-1 w-full rounded-md border border-line px-3 py-2"
+            value={priority}
+            onChange={(event) => setPriority(event.target.value as TaskPriority)}
+          >
+            {priorities.map((value) => (
+              <option key={value} value={value}>
+                {priorityLabels[value]}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <div className="flex justify-end">
+        <Button type="submit" disabled={isSubmitting}>
+          {task ? "Save Task" : "Create Task"}
+        </Button>
+      </div>
+    </form>
+  );
+}
