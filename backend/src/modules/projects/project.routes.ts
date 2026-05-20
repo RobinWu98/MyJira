@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { requireAuth, requireRole } from "../../middleware/auth.js";
 import {
   createProject,
   deleteProject,
@@ -22,7 +23,7 @@ projectRouter.get("/", async (_req, res, next) => {
   }
 });
 
-projectRouter.post("/", async (req, res, next) => {
+projectRouter.post("/", requireAuth, requireRole(["ADMIN", "MANAGER"]), async (req, res, next) => {
   try {
     const input = createProjectSchema.parse(req.body);
     res.status(201).json(await createProject(input));
@@ -40,7 +41,7 @@ projectRouter.get("/:projectId", async (req, res, next) => {
   }
 });
 
-projectRouter.patch("/:projectId", async (req, res, next) => {
+projectRouter.patch("/:projectId", requireAuth, requireRole(["ADMIN", "MANAGER"]), async (req, res, next) => {
   try {
     const { projectId } = projectIdParamsSchema.parse(req.params);
     const input = updateProjectSchema.parse(req.body);
@@ -50,7 +51,7 @@ projectRouter.patch("/:projectId", async (req, res, next) => {
   }
 });
 
-projectRouter.delete("/:projectId", async (req, res, next) => {
+projectRouter.delete("/:projectId", requireAuth, requireRole(["ADMIN", "MANAGER"]), async (req, res, next) => {
   try {
     const { projectId } = projectIdParamsSchema.parse(req.params);
     await deleteProject(projectId);

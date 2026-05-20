@@ -9,6 +9,14 @@ export class BadRequestError extends Error {
   statusCode = 400;
 }
 
+export class UnauthorizedError extends Error {
+  statusCode = 401;
+}
+
+export class ForbiddenError extends Error {
+  statusCode = 403;
+}
+
 export const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
   if (error instanceof ZodError) {
     return res.status(400).json({

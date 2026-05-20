@@ -8,6 +8,7 @@ import { ProjectForm } from "../components/projects/ProjectForm";
 import { Button } from "../components/ui/Button";
 import { EmptyState } from "../components/ui/EmptyState";
 import { Modal } from "../components/ui/Modal";
+import { useAuth } from "../auth/AuthContext";
 import type { ProjectSummary } from "../types";
 import { formatDate, projectStatusBadgeClasses } from "../utils/labels";
 
@@ -43,6 +44,7 @@ function getProjectOverview(project: ProjectSummary): ProjectOverview {
 }
 
 export function ProjectsPage() {
+  const auth = useAuth();
   const queryClient = useQueryClient();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<ProjectSummary | null>(null);
@@ -84,6 +86,7 @@ export function ProjectsPage() {
 
   const people = peopleQuery.data ?? [];
   const projects = projectsQuery.data ?? [];
+  const canManageProjects = auth.user?.role === "ADMIN" || auth.user?.role === "MANAGER";
 
   return (
     <main className="min-h-screen bg-surface px-4 py-6 sm:px-6 lg:px-8">
@@ -94,15 +97,23 @@ export function ProjectsPage() {
             <p className="mt-1 text-sm text-slate-500">Create projects and manage their tasks.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button onClick={() => setIsCreateOpen(true)}>
-              <Plus size={18} />
-              Create Project
-            </Button>
+            {canManageProjects ? (
+              <Button onClick={() => setIsCreateOpen(true)}>
+                <Plus size={18} />
+                Create Project
+              </Button>
+            ) : null}
             <Link
               className="focus-ring inline-flex h-10 items-center justify-center rounded-md border border-line bg-white px-3 text-sm font-medium text-ink transition hover:bg-slate-50"
               to="/work"
             >
               Work View
+            </Link>
+            <Link
+              className="focus-ring inline-flex h-10 items-center justify-center rounded-md border border-line bg-white px-3 text-sm font-medium text-ink transition hover:bg-slate-50"
+              to="/profile"
+            >
+              {auth.user?.name ?? "Profile"}
             </Link>
           </div>
         </header>
@@ -164,27 +175,31 @@ export function ProjectsPage() {
                               <Eye size={15} />
                               View
                             </Button>
-                            <Button
-                              variant="secondary"
-                              className="h-8 px-2"
-                              onClick={() => setEditingProject(project)}
-                            >
-                              <Edit size={15} />
-                              Edit
-                            </Button>
-                            <Button
-                              variant="danger"
-                              className="h-8 px-2"
-                              disabled={deleteMutation.isPending}
-                              onClick={() => {
-                                if (window.confirm(`Delete "${project.name}"?`)) {
-                                  deleteMutation.mutate(project.id);
-                                }
-                              }}
-                            >
-                              <Trash2 size={15} />
-                              Delete
-                            </Button>
+                            {canManageProjects ? (
+                              <>
+                                <Button
+                                  variant="secondary"
+                                  className="h-8 px-2"
+                                  onClick={() => setEditingProject(project)}
+                                >
+                                  <Edit size={15} />
+                                  Edit
+                                </Button>
+                                <Button
+                                  variant="danger"
+                                  className="h-8 px-2"
+                                  disabled={deleteMutation.isPending}
+                                  onClick={() => {
+                                    if (window.confirm(`Delete "${project.name}"?`)) {
+                                      deleteMutation.mutate(project.id);
+                                    }
+                                  }}
+                                >
+                                  <Trash2 size={15} />
+                                  Delete
+                                </Button>
+                              </>
+                            ) : null}
                           </div>
                         </td>
                       </tr>

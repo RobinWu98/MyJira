@@ -8,12 +8,15 @@ datasource db {
 }
 
 model Person {
-  id           Int      @id @default(autoincrement())
-  departmentId Int?
-  name         String
-  email        String   @unique
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id            Int      @id @default(autoincrement())
+  departmentId  Int?
+  name          String
+  email         String   @unique
+  contactNumber String?
+  passwordHash  String   @default("")
+  role          UserRole @default(USER)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   department      Department? @relation(fields: [departmentId], references: [id])
   projectsCreated Project[] @relation("ProjectCreator")
@@ -76,4 +79,10 @@ enum TaskPriority {
   HIGH
   NORMAL
   LOW
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  USER
 }

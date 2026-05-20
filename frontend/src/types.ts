@@ -1,6 +1,7 @@
 export type TaskStatus = "TODO" | "IN_PROGRESS" | "DONE";
 export type TaskPriority = "HIGH" | "NORMAL" | "LOW";
 export type GroupBy = "department" | "person";
+export type UserRole = "ADMIN" | "MANAGER" | "USER";
 
 export type Department = {
   id: number;
@@ -15,6 +16,8 @@ export type Person = {
   departmentId: number | null;
   name: string;
   email: string;
+  contactNumber: string | null;
+  role: UserRole;
   createdAt: string;
   updatedAt: string;
   department?: Department | null;

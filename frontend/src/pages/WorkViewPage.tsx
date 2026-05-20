@@ -34,7 +34,7 @@ const defaultFilters = {
   groupBy: "" as GroupBy | "",
   priority: "" as TaskPriority | "",
   status: "" as TaskStatus | "",
-  statusNot: "DONE" as TaskStatus | "",
+  statusNot: "" as TaskStatus | "",
   departmentId: "" as number | "",
   assignedPersonId: "" as number | "",
   startDateFrom: "",
@@ -289,16 +289,17 @@ function FilterContent({
 
       <Select
         label="Status"
-        value={filters.status}
+        value={filters.status || (filters.statusNot === "DONE" ? "NOT_DONE" : "")}
         onChange={(value) =>
           onChange((current) => ({
             ...current,
-            status: value as TaskStatus | "",
-            statusNot: value ? "" : "DONE"
+            status: value && value !== "NOT_DONE" ? (value as TaskStatus) : "",
+            statusNot: value === "NOT_DONE" ? "DONE" : ""
           }))
         }
       >
-        <option value="">Not Done</option>
+        <option value="">All tasks</option>
+        <option value="NOT_DONE">Not Done</option>
         {statuses.map((status) => (
           <option key={status} value={status}>
             {statusLabels[status]}

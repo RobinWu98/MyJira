@@ -347,3 +347,6 @@ After the MVP works, possible improvements are:
 - File attachments
 - Email notifications
 - Admin access control
+
+
+
