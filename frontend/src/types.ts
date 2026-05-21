@@ -1,7 +1,8 @@
 export type TaskStatus = "TODO" | "IN_PROGRESS" | "DONE";
 export type TaskPriority = "HIGH" | "NORMAL" | "LOW";
-export type GroupBy = "department" | "person";
+export type GroupBy = "department" | "person" | "project";
 export type UserRole = "ADMIN" | "MANAGER" | "USER";
+export type TaskLogType = "TASK_CREATED" | "ASSIGNEE_CHANGED" | "PRIORITY_CHANGED" | "NOTE";
 
 export type Department = {
   id: number;
@@ -55,6 +56,7 @@ export type Task = {
   sortOrder: number;
   startDate: string | null;
   completedAt: string | null;
+  version: number;
   createdAt: string;
   updatedAt: string;
   department: Department | null;
@@ -103,3 +105,14 @@ export type TaskReport =
         tasks: ReportTask[];
       }[];
     };
+
+export type TaskLog = {
+  id: number;
+  taskId: number;
+  actorId: number | null;
+  type: TaskLogType;
+  message: string;
+  metadata: unknown;
+  createdAt: string;
+  actor: Person | null;
+};

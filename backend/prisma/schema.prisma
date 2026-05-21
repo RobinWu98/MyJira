@@ -21,6 +21,7 @@ model Person {
   department      Department? @relation(fields: [departmentId], references: [id])
   projectsCreated Project[] @relation("ProjectCreator")
   assignedTasks    Task[]   @relation("TaskAssignee")
+  taskLogs         TaskLog[] @relation("TaskLogActor")
 }
 
 model Department {
@@ -59,14 +60,31 @@ model Task {
   sortOrder        Int
   startDate        DateTime?
   completedAt      DateTime?
+  version          Int          @default(1)
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
 
   project        Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   department     Department? @relation(fields: [departmentId], references: [id])
   assignedPerson Person? @relation("TaskAssignee", fields: [assignedPersonId], references: [id])
+  logs           TaskLog[]
 
   @@index([projectId, status, sortOrder])
+}
+
+model TaskLog {
+  id        Int         @id @default(autoincrement())
+  taskId    Int
+  actorId   Int?
+  type      TaskLogType
+  message   String
+  metadata  Json?
+  createdAt DateTime    @default(now())
+
+  task  Task    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  actor Person? @relation("TaskLogActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([taskId, createdAt])
 }
 
 enum TaskStatus {
@@ -85,4 +103,11 @@ enum UserRole {
   ADMIN
   MANAGER
   USER
+}
+
+enum TaskLogType {
+  TASK_CREATED
+  ASSIGNEE_CHANGED
+  PRIORITY_CHANGED
+  NOTE
 }

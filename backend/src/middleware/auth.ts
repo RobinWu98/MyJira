@@ -70,6 +70,33 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
   }
 }
 
+export async function optionalAuth(req: Request, _res: Response, next: NextFunction) {
+  try {
+    const header = req.header("authorization");
+    const token = header?.startsWith("Bearer ") ? header.slice("Bearer ".length) : null;
+
+    if (!token) {
+      next();
+      return;
+    }
+
+    const payload = jwt.verify(token, env.jwtSecret) as JwtPayload;
+    const person = await prisma.person.findUnique({ where: { id: Number(payload.sub) } });
+
+    if (person) {
+      req.user = {
+        id: person.id,
+        email: person.email,
+        role: person.role
+      };
+    }
+
+    next();
+  } catch {
+    next();
+  }
+}
+
 export function requireRole(roles: UserRole[]) {
   return (req: Request, _res: Response, next: NextFunction) => {
     if (!req.user) {

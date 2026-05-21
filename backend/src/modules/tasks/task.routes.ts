@@ -1,13 +1,17 @@
 import { Router } from "express";
 import {
+  createTaskNote,
   createTask,
   deleteTask,
   getTaskReport,
+  listTaskLogs,
   listTasks,
   reorderTasks,
   updateTask
 } from "./task.service.js";
+import { optionalAuth, requireAuth } from "../../middleware/auth.js";
 import {
+  createTaskNoteSchema,
   createTaskSchema,
   projectTaskParamsSchema,
   reorderTasksSchema,
@@ -37,11 +41,11 @@ projectTaskRouter.get("/", async (req, res, next) => {
   }
 });
 
-projectTaskRouter.post("/", async (req, res, next) => {
+projectTaskRouter.post("/", optionalAuth, async (req, res, next) => {
   try {
     const { projectId } = projectTaskParamsSchema.parse(req.params);
     const input = createTaskSchema.parse(req.body);
-    res.status(201).json(await createTask(projectId, input));
+    res.status(201).json(await createTask(projectId, input, req.user?.id));
   } catch (error) {
     next(error);
   }
@@ -57,11 +61,30 @@ projectTaskRouter.patch("/reorder", async (req, res, next) => {
   }
 });
 
-taskRouter.patch("/:taskId", async (req, res, next) => {
+taskRouter.get("/:taskId/logs", requireAuth, async (req, res, next) => {
+  try {
+    const { taskId } = taskIdParamsSchema.parse(req.params);
+    res.json(await listTaskLogs(taskId));
+  } catch (error) {
+    next(error);
+  }
+});
+
+taskRouter.post("/:taskId/logs", requireAuth, async (req, res, next) => {
+  try {
+    const { taskId } = taskIdParamsSchema.parse(req.params);
+    const input = createTaskNoteSchema.parse(req.body);
+    res.status(201).json(await createTaskNote(taskId, input, req.user!.id));
+  } catch (error) {
+    next(error);
+  }
+});
+
+taskRouter.patch("/:taskId", optionalAuth, async (req, res, next) => {
   try {
     const { taskId } = taskIdParamsSchema.parse(req.params);
     const input = updateTaskSchema.parse(req.body);
-    res.json(await updateTask(taskId, input));
+    res.json(await updateTask(taskId, input, req.user?.id));
   } catch (error) {
     next(error);
   }

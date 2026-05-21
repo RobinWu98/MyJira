@@ -1,8 +1,9 @@
 import { Prisma, type TaskPriority, type TaskStatus } from "@prisma/client";
 import type { z } from "zod";
-import { BadRequestError, NotFoundError } from "../../middleware/error-handler.js";
+import { BadRequestError, ConflictError, NotFoundError } from "../../middleware/error-handler.js";
 import { prisma } from "../../db/prisma.js";
 import type {
+  createTaskNoteSchema,
   createTaskSchema,
   reorderTasksSchema,
   taskReportQuerySchema,
@@ -65,7 +66,36 @@ export async function listTasks(projectId: number) {
   });
 }
 
-export async function createTask(projectId: number, input: z.infer<typeof createTaskSchema>) {
+function formatPersonName(name?: string | null) {
+  return name ?? "Unassigned";
+}
+
+function formatActorName(name?: string | null) {
+  return name ?? "Someone";
+}
+
+function formatPriorityLabel(priority: TaskPriority) {
+  return priority.charAt(0) + priority.slice(1).toLowerCase();
+}
+
+async function getActorName(actorId?: number) {
+  if (!actorId) {
+    return null;
+  }
+
+  const actor = await prisma.person.findUnique({
+    where: { id: actorId },
+    select: { name: true }
+  });
+
+  return actor?.name ?? null;
+}
+
+export async function createTask(
+  projectId: number,
+  input: z.infer<typeof createTaskSchema>,
+  actorId?: number
+) {
   await ensureProjectExists(projectId);
   await ensureAssignedPersonExists(input.assignedPersonId);
   await ensureDepartmentExists(input.departmentId);
@@ -75,25 +105,47 @@ export async function createTask(projectId: number, input: z.infer<typeof create
     orderBy: { sortOrder: "desc" }
   });
 
-  return prisma.task.create({
-    data: {
-      projectId,
-      departmentId: input.departmentId,
-      title: input.title,
-      description: input.description,
-      assignedPersonId: input.assignedPersonId,
-      status: input.status,
-      priority: input.priority,
-      startDate: input.startDate,
-      completedAt: input.status === "DONE" ? new Date() : null,
-      sortOrder: (lastTask?.sortOrder ?? -1) + 1
-    },
-    include: taskInclude
+  const actorName = await getActorName(actorId);
+
+  return prisma.$transaction(async (tx) => {
+    const task = await tx.task.create({
+      data: {
+        projectId,
+        departmentId: input.departmentId,
+        title: input.title,
+        description: input.description,
+        assignedPersonId: input.assignedPersonId,
+        status: input.status,
+        priority: input.priority,
+        startDate: input.startDate,
+        completedAt: input.status === "DONE" ? new Date() : null,
+        sortOrder: (lastTask?.sortOrder ?? -1) + 1
+      },
+      include: taskInclude
+    });
+
+    await tx.taskLog.create({
+      data: {
+        taskId: task.id,
+        actorId,
+        type: "TASK_CREATED",
+        message: `${formatActorName(actorName)} created this task.`
+      }
+    });
+
+    return task;
   });
 }
 
-export async function updateTask(taskId: number, input: z.infer<typeof updateTaskSchema>) {
-  const existing = await prisma.task.findUnique({ where: { id: taskId } });
+export async function updateTask(
+  taskId: number,
+  input: z.infer<typeof updateTaskSchema>,
+  actorId?: number
+) {
+  const existing = await prisma.task.findUnique({
+    where: { id: taskId },
+    include: { assignedPerson: true }
+  });
 
   if (!existing) {
     throw new NotFoundError("Task not found");
@@ -109,13 +161,73 @@ export async function updateTask(taskId: number, input: z.infer<typeof updateTas
         ? null
         : undefined;
 
-  return prisma.task.update({
-    where: { id: taskId },
-    data: {
-      ...input,
-      completedAt
-    },
-    include: taskInclude
+  const nextAssignee =
+    input.assignedPersonId !== undefined && input.assignedPersonId !== null
+      ? await prisma.person.findUnique({ where: { id: input.assignedPersonId } })
+      : null;
+  const actorName = await getActorName(actorId);
+  const { version, ...taskInput } = input;
+
+  return prisma.$transaction(async (tx) => {
+    const updateResult = await tx.task.updateMany({
+      where: { id: taskId, version },
+      data: {
+        ...taskInput,
+        completedAt,
+        version: { increment: 1 }
+      }
+    });
+
+    if (updateResult.count === 0) {
+      throw new ConflictError("This task was changed by someone else. Please refresh and try again.");
+    }
+
+    if (
+      taskInput.assignedPersonId !== undefined &&
+      taskInput.assignedPersonId !== existing.assignedPersonId
+    ) {
+      const fromName = formatPersonName(existing.assignedPerson?.name);
+      const toName = formatPersonName(nextAssignee?.name);
+
+      await tx.taskLog.create({
+        data: {
+          taskId,
+          actorId,
+          type: "ASSIGNEE_CHANGED",
+          message: `${formatActorName(actorName)} changed assignee from ${fromName} to ${toName}.`,
+          metadata: {
+            fromPersonId: existing.assignedPersonId,
+            toPersonId: taskInput.assignedPersonId
+          }
+        }
+      });
+    }
+
+    if (taskInput.priority && taskInput.priority !== existing.priority) {
+      await tx.taskLog.create({
+        data: {
+          taskId,
+          actorId,
+          type: "PRIORITY_CHANGED",
+          message: `${formatActorName(actorName)} changed priority from ${formatPriorityLabel(existing.priority)} to ${formatPriorityLabel(taskInput.priority)}.`,
+          metadata: {
+            fromPriority: existing.priority,
+            toPriority: taskInput.priority
+          }
+        }
+      });
+    }
+
+    const task = await tx.task.findUnique({
+      where: { id: taskId },
+      include: taskInclude
+    });
+
+    if (!task) {
+      throw new NotFoundError("Task not found");
+    }
+
+    return task;
   });
 }
 
@@ -143,16 +255,23 @@ export async function reorderTasks(projectId: number, input: z.infer<typeof reor
   }
 
   await prisma.$transaction(
-    input.tasks.map((task) =>
-      prisma.task.update({
-        where: { id: task.id },
-        data: {
-          status: task.status,
-          sortOrder: task.sortOrder,
-          completedAt: task.status === "DONE" ? new Date() : null
+    async (tx) => {
+      for (const task of input.tasks) {
+        const updateResult = await tx.task.updateMany({
+          where: { id: task.id, projectId, version: task.version },
+          data: {
+            status: task.status,
+            sortOrder: task.sortOrder,
+            completedAt: task.status === "DONE" ? new Date() : null,
+            version: { increment: 1 }
+          }
+        });
+
+        if (updateResult.count === 0) {
+          throw new ConflictError("This board was changed by someone else. Please refresh and try again.");
         }
-      })
-    )
+      }
+    }
   );
 
   return listTasks(projectId);
@@ -318,8 +437,18 @@ export async function getTaskReport(query: ReportQuery) {
   const groupMap = new Map<string, { groupId: number | null; groupName: string; tasks: ReportTask[] }>();
 
   for (const task of tasks) {
-    const groupId = query.groupBy === "department" ? task.departmentId : task.assignedPersonId;
-    const groupName = query.groupBy === "department" ? task.departmentName : task.assignedPersonName;
+    const groupId =
+      query.groupBy === "department"
+        ? task.departmentId
+        : query.groupBy === "person"
+          ? task.assignedPersonId
+          : task.projectId;
+    const groupName =
+      query.groupBy === "department"
+        ? task.departmentName
+        : query.groupBy === "person"
+          ? task.assignedPersonName
+          : task.projectName;
     const key = `${groupId ?? "none"}:${groupName}`;
 
     if (!groupMap.has(key)) {
@@ -333,4 +462,45 @@ export async function getTaskReport(query: ReportQuery) {
     groupBy: query.groupBy,
     groups: [...groupMap.values()]
   };
+}
+
+export async function listTaskLogs(taskId: number) {
+  const task = await prisma.task.findUnique({ where: { id: taskId }, select: { id: true } });
+
+  if (!task) {
+    throw new NotFoundError("Task not found");
+  }
+
+  return prisma.taskLog.findMany({
+    where: { taskId },
+    include: { actor: true },
+    orderBy: { createdAt: "desc" }
+  });
+}
+
+export async function createTaskNote(
+  taskId: number,
+  input: z.infer<typeof createTaskNoteSchema>,
+  actorId: number
+) {
+  const task = await prisma.task.findUnique({ where: { id: taskId }, select: { id: true } });
+
+  if (!task) {
+    throw new NotFoundError("Task not found");
+  }
+
+  const actorName = await getActorName(actorId);
+
+  return prisma.taskLog.create({
+    data: {
+      taskId,
+      actorId,
+      type: "NOTE",
+      message: input.message,
+      metadata: {
+        actorName: formatActorName(actorName)
+      }
+    },
+    include: { actor: true }
+  });
 }

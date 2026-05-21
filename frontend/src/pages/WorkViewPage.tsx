@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { ArrowDownUp, ArrowLeft, Filter, FolderKanban, RotateCcw } from "lucide-react";
+import { ArrowDownUp, ArrowLeft, Filter, FolderKanban, RotateCcw, Search } from "lucide-react";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
@@ -7,7 +7,7 @@ import { fetchDepartments } from "../api/departments";
 import { fetchPeople } from "../api/people";
 import { fetchTaskReport, type TaskReportQuery } from "../api/tasks";
 import { Button } from "../components/ui/Button";
-import type { GroupBy, ReportTask, TaskPriority, TaskStatus } from "../types";
+import type { GroupBy, ReportTask, TaskPriority, TaskReport, TaskStatus } from "../types";
 import {
   formatDate,
   priorities,
@@ -46,6 +46,7 @@ const defaultFilters = {
 
 export function WorkViewPage() {
   const [filters, setFilters] = useState(defaultFilters);
+  const [search, setSearch] = useState("");
   const [openPopover, setOpenPopover] = useState<PopoverName>(null);
 
   const departmentsQuery = useQuery({
@@ -82,12 +83,13 @@ export function WorkViewPage() {
   const departments = departmentsQuery.data ?? [];
   const people = peopleQuery.data ?? [];
   const report = reportQuery.data;
+  const visibleReport = useMemo(() => filterReportBySearch(report, search), [report, search]);
 
   const chips = buildActiveChips(filters, departments, people);
-  const totalTasks = report
-    ? report.groupBy
-      ? report.groups.reduce((sum, group) => sum + group.tasks.length, 0)
-      : report.tasks.length
+  const totalTasks = visibleReport
+    ? visibleReport.groupBy
+      ? visibleReport.groups.reduce((sum, group) => sum + group.tasks.length, 0)
+      : visibleReport.tasks.length
     : 0;
 
   return (
@@ -114,6 +116,18 @@ export function WorkViewPage() {
           </div>
 
           <div className="relative flex flex-wrap items-center justify-start gap-2 lg:justify-end">
+            <label className="relative block w-full sm:w-64">
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                size={16}
+              />
+              <input
+                className="focus-ring h-9 w-full rounded-md border border-line bg-white pl-9 pr-3 text-sm"
+                placeholder="Search tasks..."
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
+            </label>
             <ToolbarButton
               active={openPopover === "filter"}
               onClick={() => setOpenPopover((current) => (current === "filter" ? null : "filter"))}
@@ -139,6 +153,7 @@ export function WorkViewPage() {
               variant="ghost"
               onClick={() => {
                 setFilters(defaultFilters);
+                setSearch("");
                 setOpenPopover(null);
               }}
             >
@@ -173,6 +188,11 @@ export function WorkViewPage() {
 
         {chips.length ? (
           <div className="mb-4 flex flex-wrap gap-2">
+            {search ? (
+              <span className="rounded-full border border-line bg-white px-3 py-1 text-xs text-slate-600">
+                Search: {search}
+              </span>
+            ) : null}
             {chips.map((chip) => (
               <span
                 key={chip}
@@ -181,6 +201,12 @@ export function WorkViewPage() {
                 {chip}
               </span>
             ))}
+          </div>
+        ) : search ? (
+          <div className="mb-4 flex flex-wrap gap-2">
+            <span className="rounded-full border border-line bg-white px-3 py-1 text-xs text-slate-600">
+              Search: {search}
+            </span>
           </div>
         ) : null}
 
@@ -192,9 +218,9 @@ export function WorkViewPage() {
           <div className="rounded-lg border border-red-200 bg-red-50 p-6 text-sm text-red-700">
             Could not load task report.
           </div>
-        ) : report?.groupBy ? (
+        ) : visibleReport?.groupBy ? (
           <div className="space-y-5">
-            {report.groups.map((group) => (
+            {visibleReport.groups.map((group) => (
               <section
                 key={`${group.groupId ?? "none"}-${group.groupName}`}
                 className="rounded-lg border border-line bg-white"
@@ -203,13 +229,18 @@ export function WorkViewPage() {
                   <h2 className="font-semibold">{group.groupName}</h2>
                   <p className="text-sm text-slate-500">{group.tasks.length} tasks</p>
                 </div>
-                <TaskTable tasks={group.tasks} compactGroup={report.groupBy} />
+                <TaskTable tasks={group.tasks} compactGroup={visibleReport.groupBy} />
               </section>
             ))}
+            {!visibleReport.groups.length ? (
+              <section className="rounded-lg border border-line bg-white">
+                <TaskTable tasks={[]} />
+              </section>
+            ) : null}
           </div>
         ) : (
           <section className="rounded-lg border border-line bg-white">
-            <TaskTable tasks={report?.tasks ?? []} />
+            <TaskTable tasks={visibleReport?.tasks ?? []} />
           </section>
         )}
       </div>
@@ -423,6 +454,7 @@ function GroupContent({
     <div className="space-y-2">
       {[
         { value: "", label: "No group", description: "Show one flat task list." },
+        { value: "project", label: "Project", description: "Group tasks by project." },
         { value: "department", label: "Department", description: "Group tasks by task department." },
         { value: "person", label: "Person", description: "Group tasks by assigned person." }
       ].map((option) => (
@@ -506,7 +538,9 @@ function TaskTable({ tasks, compactGroup }: { tasks: ReportTask[]; compactGroup?
         <thead className="bg-slate-50 text-xs uppercase text-slate-500">
           <tr>
             <th className="px-4 py-3 font-semibold">Task</th>
-            <th className="px-4 py-3 font-semibold">Project</th>
+            {compactGroup !== "project" ? (
+              <th className="px-4 py-3 font-semibold">Project</th>
+            ) : null}
             {compactGroup !== "department" ? (
               <th className="px-4 py-3 font-semibold">Department</th>
             ) : null}
@@ -521,7 +555,9 @@ function TaskTable({ tasks, compactGroup }: { tasks: ReportTask[]; compactGroup?
           {tasks.map((task) => (
             <tr key={task.id}>
               <td className="px-4 py-3 text-center font-medium">{task.title}</td>
-              <td className="px-4 py-3 text-slate-600">{task.projectName}</td>
+              {compactGroup !== "project" ? (
+                <td className="px-4 py-3 text-slate-600">{task.projectName}</td>
+              ) : null}
               {compactGroup !== "department" ? (
                 <td className="px-4 py-3 text-slate-600">{task.departmentName}</td>
               ) : null}
@@ -599,8 +635,56 @@ function buildActiveChips(
   }
 
   if (filters.groupBy) {
-    chips.push(`Group: ${filters.groupBy === "department" ? "Department" : "Person"}`);
+    const groupLabel =
+      filters.groupBy === "department"
+        ? "Department"
+        : filters.groupBy === "person"
+          ? "Person"
+          : "Project";
+    chips.push(`Group: ${groupLabel}`);
   }
 
   return chips;
+}
+
+function filterReportBySearch(report: TaskReport | undefined, search: string) {
+  if (!report) {
+    return report;
+  }
+
+  const query = search.trim().toLowerCase();
+
+  if (!query) {
+    return report;
+  }
+
+  const matches = (task: ReportTask) =>
+    [
+      task.title,
+      task.projectName,
+      task.departmentName,
+      task.assignedPersonName,
+      priorityLabels[task.priority],
+      statusLabels[task.status]
+    ]
+      .join(" ")
+      .toLowerCase()
+      .includes(query);
+
+  if (report.groupBy) {
+    return {
+      ...report,
+      groups: report.groups
+        .map((group) => ({
+          ...group,
+          tasks: group.tasks.filter(matches)
+        }))
+        .filter((group) => group.tasks.length > 0)
+    };
+  }
+
+  return {
+    ...report,
+    tasks: report.tasks.filter(matches)
+  };
 }

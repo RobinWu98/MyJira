@@ -22,6 +22,7 @@ export const createTaskSchema = z.object({
 });
 
 export const updateTaskSchema = z.object({
+  version: z.coerce.number().int().positive(),
   title: z.string().trim().min(1, "Task title is required").optional(),
   description: z.string().trim().optional().nullable(),
   departmentId: z.coerce.number().int().positive().optional().nullable(),
@@ -37,13 +38,14 @@ export const reorderTasksSchema = z.object({
     z.object({
       id: z.coerce.number().int().positive(),
       status: taskStatusSchema,
-      sortOrder: z.coerce.number().int().nonnegative()
+      sortOrder: z.coerce.number().int().nonnegative(),
+      version: z.coerce.number().int().positive()
     })
   )
 });
 
 export const taskReportQuerySchema = z.object({
-  groupBy: z.enum(["department", "person"]).optional(),
+  groupBy: z.enum(["department", "person", "project"]).optional(),
   priority: taskPrioritySchema.optional(),
   status: taskStatusSchema.optional(),
   statusNot: taskStatusSchema.optional(),
@@ -53,4 +55,8 @@ export const taskReportQuerySchema = z.object({
   startDateTo: z.coerce.date().optional(),
   incompleteForMoreThanDays: z.coerce.number().int().nonnegative().optional(),
   sort: z.string().trim().optional()
+});
+
+export const createTaskNoteSchema = z.object({
+  message: z.string().trim().min(1, "Note is required").max(2000, "Note is too long")
 });

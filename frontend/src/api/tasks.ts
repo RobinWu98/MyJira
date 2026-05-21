@@ -1,5 +1,5 @@
 import { apiRequest } from "./client";
-import type { GroupBy, Task, TaskPriority, TaskReport, TaskStatus } from "../types";
+import type { GroupBy, Task, TaskLog, TaskPriority, TaskReport, TaskStatus } from "../types";
 
 export type TaskPayload = {
   title: string;
@@ -15,6 +15,11 @@ export type ReorderTaskPayload = {
   id: number;
   status: TaskStatus;
   sortOrder: number;
+  version: number;
+};
+
+export type UpdateTaskPayload = Partial<TaskPayload> & {
+  version: number;
 };
 
 export function fetchTasks(projectId: number) {
@@ -28,7 +33,7 @@ export function createTask(projectId: number, payload: TaskPayload) {
   });
 }
 
-export function updateTask(taskId: number, payload: Partial<TaskPayload>) {
+export function updateTask(taskId: number, payload: UpdateTaskPayload) {
   return apiRequest<Task>(`/tasks/${taskId}`, {
     method: "PATCH",
     body: JSON.stringify(payload)
@@ -72,4 +77,15 @@ export function fetchTaskReport(query: TaskReportQuery) {
 
   const search = params.toString();
   return apiRequest<TaskReport>(`/tasks/report${search ? `?${search}` : ""}`);
+}
+
+export function fetchTaskLogs(taskId: number) {
+  return apiRequest<TaskLog[]>(`/tasks/${taskId}/logs`);
+}
+
+export function createTaskNote(taskId: number, message: string) {
+  return apiRequest<TaskLog>(`/tasks/${taskId}/logs`, {
+    method: "POST",
+    body: JSON.stringify({ message })
+  });
 }

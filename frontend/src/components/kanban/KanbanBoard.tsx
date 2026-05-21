@@ -32,10 +32,12 @@ type BoardState = Record<TaskStatus, Task[]>;
 
 type KanbanBoardProps = {
   tasks: Task[];
+  onOpenTask: (task: Task) => void;
   onEditTask: (task: Task) => void;
   onDeleteTask: (task: Task) => void;
-  onReorder: (tasks: { id: number; status: TaskStatus; sortOrder: number }[]) => void;
+  onReorder: (tasks: { id: number; status: TaskStatus; sortOrder: number; version: number }[]) => void;
   isSaving: boolean;
+  isReorderDisabled?: boolean;
 };
 
 function toBoardState(tasks: Task[]): BoardState {
@@ -63,17 +65,20 @@ function flattenBoard(board: BoardState) {
     board[status].map((task, index) => ({
       id: task.id,
       status,
-      sortOrder: index
+      sortOrder: index,
+      version: task.version
     }))
   );
 }
 
 export function KanbanBoard({
   tasks,
+  onOpenTask,
   onEditTask,
   onDeleteTask,
   onReorder,
-  isSaving
+  isSaving,
+  isReorderDisabled = false
 }: KanbanBoardProps) {
   const initialBoard = useMemo(() => toBoardState(tasks), [tasks]);
   const [board, setBoard] = useState<BoardState>(initialBoard);
@@ -121,10 +126,18 @@ export function KanbanBoard({
   }
 
   function handleDragStart(event: DragStartEvent) {
+    if (isReorderDisabled) {
+      return;
+    }
+
     setActiveTaskId(Number(event.active.id));
   }
 
   function handleDragOver(event: DragOverEvent) {
+    if (isReorderDisabled) {
+      return;
+    }
+
     const activeId = Number(event.active.id);
     const overId = event.over?.id;
 
@@ -139,6 +152,11 @@ export function KanbanBoard({
   function handleDragEnd(event: DragEndEvent) {
     setActiveTaskId(null);
 
+    if (isReorderDisabled) {
+      setBoard(initialBoard);
+      return;
+    }
+
     if (!event.over) {
       setBoard(initialBoard);
       return;
@@ -152,6 +170,9 @@ export function KanbanBoard({
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-lg font-semibold">Kanban board</h2>
         {isSaving ? <span className="text-sm text-slate-500">Saving board...</span> : null}
+        {isReorderDisabled ? (
+          <span className="text-sm text-slate-500">Reset controls to reorder tasks.</span>
+        ) : null}
       </div>
 
       <DndContext
@@ -168,8 +189,10 @@ export function KanbanBoard({
               status={status}
               tasks={board[status] ?? []}
               activeTaskId={activeTaskId}
+              onOpenTask={onOpenTask}
               onEditTask={onEditTask}
               onDeleteTask={onDeleteTask}
+              isReorderDisabled={isReorderDisabled}
             />
           ))}
         </div>
@@ -182,14 +205,18 @@ function KanbanColumn({
   status,
   tasks,
   activeTaskId,
+  onOpenTask,
   onEditTask,
-  onDeleteTask
+  onDeleteTask,
+  isReorderDisabled
 }: {
   status: TaskStatus;
   tasks: Task[];
   activeTaskId: number | null;
+  onOpenTask: (task: Task) => void;
   onEditTask: (task: Task) => void;
   onDeleteTask: (task: Task) => void;
+  isReorderDisabled: boolean;
 }) {
   const { setNodeRef } = useDroppable({ id: status });
 
@@ -212,8 +239,10 @@ function KanbanColumn({
               key={task.id}
               task={task}
               isDragging={activeTaskId === task.id}
+              onOpen={() => onOpenTask(task)}
               onEdit={() => onEditTask(task)}
               onDelete={() => onDeleteTask(task)}
+              isReorderDisabled={isReorderDisabled}
             />
           ))}
           {!tasks.length ? (
@@ -230,16 +259,21 @@ function KanbanColumn({
 function TaskCard({
   task,
   isDragging,
+  onOpen,
   onEdit,
-  onDelete
+  onDelete,
+  isReorderDisabled
 }: {
   task: Task;
   isDragging: boolean;
+  onOpen: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  isReorderDisabled: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({
-    id: task.id
+    id: task.id,
+    disabled: isReorderDisabled
   });
 
   const style = {
@@ -252,6 +286,7 @@ function TaskCard({
       ref={setNodeRef}
       style={style}
       className={`rounded-md border border-line bg-white p-3 shadow-sm ${isDragging ? "opacity-60" : ""}`}
+      onClick={onOpen}
       {...attributes}
       {...listeners}
     >

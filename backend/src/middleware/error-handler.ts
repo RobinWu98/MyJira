@@ -17,6 +17,10 @@ export class ForbiddenError extends Error {
   statusCode = 403;
 }
 
+export class ConflictError extends Error {
+  statusCode = 409;
+}
+
 export const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
   if (error instanceof ZodError) {
     return res.status(400).json({
