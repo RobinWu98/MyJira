@@ -66,6 +66,19 @@ export async function listTasks(projectId: number) {
   });
 }
 
+export async function getTask(taskId: number) {
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    include: taskInclude
+  });
+
+  if (!task) {
+    throw new NotFoundError("Task not found");
+  }
+
+  return task;
+}
+
 function formatPersonName(name?: string | null) {
   return name ?? "Unassigned";
 }

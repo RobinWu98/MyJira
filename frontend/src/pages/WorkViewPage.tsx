@@ -1,12 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
-import { ArrowDownUp, ArrowLeft, Filter, FolderKanban, RotateCcw, Search } from "lucide-react";
+import { ArrowDownUp, Filter, FolderKanban, RotateCcw, Search, UserCircle } from "lucide-react";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchDepartments } from "../api/departments";
 import { fetchPeople } from "../api/people";
-import { fetchTaskReport, type TaskReportQuery } from "../api/tasks";
+import { fetchTask, fetchTaskReport, type TaskReportQuery } from "../api/tasks";
+import { TaskActivityModal } from "../components/tasks/TaskActivityModal";
 import { Button } from "../components/ui/Button";
+import { Modal } from "../components/ui/Modal";
 import type { GroupBy, ReportTask, TaskPriority, TaskReport, TaskStatus } from "../types";
 import {
   formatDate,
@@ -31,7 +33,7 @@ const sortOptions = [
 ];
 
 const defaultFilters = {
-  groupBy: "" as GroupBy | "",
+  groupBy: "person" as GroupBy | "",
   priority: "" as TaskPriority | "",
   status: "" as TaskStatus | "",
   statusNot: "" as TaskStatus | "",
@@ -48,6 +50,7 @@ export function WorkViewPage() {
   const [filters, setFilters] = useState(defaultFilters);
   const [search, setSearch] = useState("");
   const [openPopover, setOpenPopover] = useState<PopoverName>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
 
   const departmentsQuery = useQuery({
     queryKey: ["departments"],
@@ -80,6 +83,12 @@ export function WorkViewPage() {
     queryFn: () => fetchTaskReport(reportQueryPayload)
   });
 
+  const selectedTaskQuery = useQuery({
+    queryKey: ["tasks", selectedTaskId],
+    queryFn: () => fetchTask(selectedTaskId!),
+    enabled: selectedTaskId !== null
+  });
+
   const departments = departmentsQuery.data ?? [];
   const people = peopleQuery.data ?? [];
   const report = reportQuery.data;
@@ -95,10 +104,10 @@ export function WorkViewPage() {
   return (
     <main className="min-h-screen bg-surface px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
-        <div className="mb-5 flex items-center justify-between gap-4">
-          <Link className="inline-flex items-center gap-2 text-sm text-slate-600" to="/">
-            <ArrowLeft size={16} />
-            Back to projects
+        <div className="mb-5 flex items-center justify-end gap-4">
+          <Link className="inline-flex items-center gap-2 text-sm text-slate-600" to="/profile">
+            <UserCircle size={16} />
+            Profile
           </Link>
         </div>
 
@@ -229,21 +238,41 @@ export function WorkViewPage() {
                   <h2 className="font-semibold">{group.groupName}</h2>
                   <p className="text-sm text-slate-500">{group.tasks.length} tasks</p>
                 </div>
-                <TaskTable tasks={group.tasks} compactGroup={visibleReport.groupBy} />
+                <TaskTable
+                  tasks={group.tasks}
+                  compactGroup={visibleReport.groupBy}
+                  onOpenTask={setSelectedTaskId}
+                />
               </section>
             ))}
             {!visibleReport.groups.length ? (
               <section className="rounded-lg border border-line bg-white">
-                <TaskTable tasks={[]} />
+                <TaskTable tasks={[]} onOpenTask={setSelectedTaskId} />
               </section>
             ) : null}
           </div>
         ) : (
           <section className="rounded-lg border border-line bg-white">
-            <TaskTable tasks={visibleReport?.tasks ?? []} />
+            <TaskTable tasks={visibleReport?.tasks ?? []} onOpenTask={setSelectedTaskId} />
           </section>
         )}
       </div>
+
+      {selectedTaskId !== null ? (
+        <Modal title="Task activity" onClose={() => setSelectedTaskId(null)}>
+          {selectedTaskQuery.isLoading ? (
+            <div className="rounded-lg border border-line p-4 text-center text-sm text-slate-500">
+              Loading task...
+            </div>
+          ) : selectedTaskQuery.isError || !selectedTaskQuery.data ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-center text-sm text-red-700">
+              Could not load this task.
+            </div>
+          ) : (
+            <TaskActivityModal task={selectedTaskQuery.data} />
+          )}
+        </Modal>
+      ) : null}
     </main>
   );
 }
@@ -527,7 +556,15 @@ function Input({
   );
 }
 
-function TaskTable({ tasks, compactGroup }: { tasks: ReportTask[]; compactGroup?: GroupBy }) {
+function TaskTable({
+  tasks,
+  compactGroup,
+  onOpenTask
+}: {
+  tasks: ReportTask[];
+  compactGroup?: GroupBy;
+  onOpenTask: (taskId: number) => void;
+}) {
   if (!tasks.length) {
     return <div className="p-6 text-sm text-slate-500">No matching tasks.</div>;
   }
@@ -554,7 +591,15 @@ function TaskTable({ tasks, compactGroup }: { tasks: ReportTask[]; compactGroup?
         <tbody className="divide-y divide-line">
           {tasks.map((task) => (
             <tr key={task.id}>
-              <td className="px-4 py-3 text-center font-medium">{task.title}</td>
+              <td className="px-4 py-3 text-center font-medium">
+                <button
+                  className="focus-ring rounded-sm text-brand hover:underline"
+                  onClick={() => onOpenTask(task.id)}
+                  type="button"
+                >
+                  {task.title}
+                </button>
+              </td>
               {compactGroup !== "project" ? (
                 <td className="px-4 py-3 text-slate-600">{task.projectName}</td>
               ) : null}

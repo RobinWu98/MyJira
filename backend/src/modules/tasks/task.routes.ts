@@ -3,6 +3,7 @@ import {
   createTaskNote,
   createTask,
   deleteTask,
+  getTask,
   getTaskReport,
   listTaskLogs,
   listTasks,
@@ -56,6 +57,15 @@ projectTaskRouter.patch("/reorder", async (req, res, next) => {
     const { projectId } = projectTaskParamsSchema.parse(req.params);
     const input = reorderTasksSchema.parse(req.body);
     res.json(await reorderTasks(projectId, input));
+  } catch (error) {
+    next(error);
+  }
+});
+
+taskRouter.get("/:taskId", requireAuth, async (req, res, next) => {
+  try {
+    const { taskId } = taskIdParamsSchema.parse(req.params);
+    res.json(await getTask(taskId));
   } catch (error) {
     next(error);
   }

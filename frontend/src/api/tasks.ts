@@ -26,6 +26,10 @@ export function fetchTasks(projectId: number) {
   return apiRequest<Task[]>(`/projects/${projectId}/tasks`);
 }
 
+export function fetchTask(taskId: number) {
+  return apiRequest<Task>(`/tasks/${taskId}`);
+}
+
 export function createTask(projectId: number, payload: TaskPayload) {
   return apiRequest<Task>(`/projects/${projectId}/tasks`, {
     method: "POST",

@@ -44,7 +44,7 @@ export function ProfilePage() {
       <div className="mx-auto max-w-7xl">
         <Link className="mb-5 inline-flex items-center gap-2 text-sm text-slate-600" to="/">
           <ArrowLeft size={16} />
-          Back to projects
+          Back to company tasks
         </Link>
 
         <header className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
