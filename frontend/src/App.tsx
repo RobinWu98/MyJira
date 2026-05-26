@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./auth/AuthContext";
+import { AdminPeoplePage } from "./pages/AdminPeoplePage";
 import { LoginPage } from "./pages/LoginPage";
 import { ProfilePage } from "./pages/ProfilePage";
 import { WorkViewPage } from "./pages/WorkViewPage";
@@ -20,6 +21,18 @@ export function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/" element={auth.isAuthenticated ? <WorkViewPage /> : <Navigate to="/login" replace />} />
       <Route path="/profile" element={auth.isAuthenticated ? <ProfilePage /> : <Navigate to="/login" replace />} />
+      <Route
+        path="/admin/people"
+        element={
+          auth.user?.role === "ADMIN" ? (
+            <AdminPeoplePage />
+          ) : auth.isAuthenticated ? (
+            <Navigate to="/" replace />
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
       <Route path="/work" element={<Navigate to="/" replace />} />
       <Route
         path="/projects/:projectId"

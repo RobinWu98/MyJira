@@ -1,15 +1,18 @@
-import { useQuery } from "@tanstack/react-query";
-import { ArrowDownUp, Filter, FolderKanban, RotateCcw, Search, UserCircle } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowDownUp, Filter, FolderKanban, Pencil, Plus, RotateCcw, Search, UserCircle } from "lucide-react";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchDepartments } from "../api/departments";
 import { fetchPeople } from "../api/people";
-import { fetchTask, fetchTaskReport, type TaskReportQuery } from "../api/tasks";
+import { fetchProjects } from "../api/projects";
+import { createTask, fetchTask, fetchTaskReport, updateTask, type TaskReportQuery } from "../api/tasks";
+import { useAuth } from "../auth/AuthContext";
 import { TaskActivityModal } from "../components/tasks/TaskActivityModal";
+import { TaskForm } from "../components/tasks/TaskForm";
 import { Button } from "../components/ui/Button";
 import { Modal } from "../components/ui/Modal";
-import type { GroupBy, ReportTask, TaskPriority, TaskReport, TaskStatus } from "../types";
+import type { GroupBy, Person, ReportTask, TaskPriority, TaskReport, TaskStatus } from "../types";
 import {
   formatDate,
   priorities,
@@ -47,10 +50,15 @@ const defaultFilters = {
 };
 
 export function WorkViewPage() {
+  const auth = useAuth();
+  const queryClient = useQueryClient();
   const [filters, setFilters] = useState(defaultFilters);
   const [search, setSearch] = useState("");
   const [openPopover, setOpenPopover] = useState<PopoverName>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
+  const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
+  const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
+  const [selectedProjectId, setSelectedProjectId] = useState(0);
 
   const departmentsQuery = useQuery({
     queryKey: ["departments"],
@@ -60,6 +68,11 @@ export function WorkViewPage() {
   const peopleQuery = useQuery({
     queryKey: ["people"],
     queryFn: fetchPeople
+  });
+
+  const projectsQuery = useQuery({
+    queryKey: ["projects"],
+    queryFn: fetchProjects
   });
 
   const reportQueryPayload: TaskReportQuery = useMemo(
@@ -89,10 +102,43 @@ export function WorkViewPage() {
     enabled: selectedTaskId !== null
   });
 
+  const editingTaskQuery = useQuery({
+    queryKey: ["tasks", editingTaskId],
+    queryFn: () => fetchTask(editingTaskId!),
+    enabled: editingTaskId !== null
+  });
+
+  const createTaskMutation = useMutation({
+    mutationFn: (payload: Parameters<typeof createTask>[1]) => createTask(selectedProjectId, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["task-report"] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      setIsTaskFormOpen(false);
+    }
+  });
+
+  const updateTaskMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: number; payload: Parameters<typeof updateTask>[1] }) =>
+      updateTask(id, payload),
+    onSuccess: (_task, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["tasks", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["task-report"] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      setEditingTaskId(null);
+    }
+  });
+
   const departments = departmentsQuery.data ?? [];
   const people = peopleQuery.data ?? [];
+  const projects = projectsQuery.data ?? [];
   const report = reportQuery.data;
   const visibleReport = useMemo(() => filterReportBySearch(report, search), [report, search]);
+  const reportTasks = useMemo(() => flattenReportTasks(report), [report]);
+  const editingReportTask = reportTasks.find((task) => task.id === editingTaskId);
+  const canEditEditingTaskStatus =
+    Boolean(auth.user) &&
+    (auth.user?.id === editingTaskQuery.data?.assignedPersonId ||
+      auth.user?.id === editingReportTask?.createdByPersonId);
 
   const chips = buildActiveChips(filters, departments, people);
   const totalTasks = visibleReport
@@ -125,6 +171,16 @@ export function WorkViewPage() {
           </div>
 
           <div className="relative flex flex-wrap items-center justify-start gap-2 lg:justify-end">
+            <Button
+              disabled={!projects.length}
+              onClick={() => {
+                setSelectedProjectId((current) => current || projects[0]?.id || 0);
+                setIsTaskFormOpen(true);
+              }}
+            >
+              <Plus size={16} />
+              Create Task
+            </Button>
             <label className="relative block w-full sm:w-64">
               <Search
                 className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
@@ -241,19 +297,31 @@ export function WorkViewPage() {
                 <TaskTable
                   tasks={group.tasks}
                   compactGroup={visibleReport.groupBy}
+                  currentUser={auth.user}
+                  onEditTask={setEditingTaskId}
                   onOpenTask={setSelectedTaskId}
                 />
               </section>
             ))}
             {!visibleReport.groups.length ? (
               <section className="rounded-lg border border-line bg-white">
-                <TaskTable tasks={[]} onOpenTask={setSelectedTaskId} />
+                <TaskTable
+                  tasks={[]}
+                  currentUser={auth.user}
+                  onEditTask={setEditingTaskId}
+                  onOpenTask={setSelectedTaskId}
+                />
               </section>
             ) : null}
           </div>
         ) : (
           <section className="rounded-lg border border-line bg-white">
-            <TaskTable tasks={visibleReport?.tasks ?? []} onOpenTask={setSelectedTaskId} />
+            <TaskTable
+              tasks={visibleReport?.tasks ?? []}
+              currentUser={auth.user}
+              onEditTask={setEditingTaskId}
+              onOpenTask={setSelectedTaskId}
+            />
           </section>
         )}
       </div>
@@ -270,6 +338,65 @@ export function WorkViewPage() {
             </div>
           ) : (
             <TaskActivityModal task={selectedTaskQuery.data} />
+          )}
+        </Modal>
+      ) : null}
+
+      {isTaskFormOpen ? (
+        <Modal title="Create task" onClose={() => setIsTaskFormOpen(false)}>
+          <div className="space-y-4">
+            <label className="block">
+              <span className="text-sm font-medium">Project</span>
+              <select
+                className="focus-ring mt-1 w-full rounded-md border border-line px-3 py-2"
+                value={selectedProjectId}
+                onChange={(event) => setSelectedProjectId(Number(event.target.value))}
+              >
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <TaskForm
+              people={people}
+              departments={departments}
+              isSubmitting={createTaskMutation.isPending || !selectedProjectId}
+              onSubmit={(payload) => {
+                if (selectedProjectId) {
+                  createTaskMutation.mutate(payload);
+                }
+              }}
+            />
+          </div>
+        </Modal>
+      ) : null}
+
+      {editingTaskId !== null ? (
+        <Modal title="Edit task" onClose={() => setEditingTaskId(null)}>
+          {editingTaskQuery.isLoading ? (
+            <div className="rounded-lg border border-line p-4 text-center text-sm text-slate-500">
+              Loading task...
+            </div>
+          ) : editingTaskQuery.isError || !editingTaskQuery.data ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-center text-sm text-red-700">
+              Could not load this task.
+            </div>
+          ) : (
+            <TaskForm
+              people={people}
+              departments={departments}
+              task={editingTaskQuery.data}
+              canEditStatus={canEditEditingTaskStatus}
+              isSubmitting={updateTaskMutation.isPending}
+              onSubmit={(payload) =>
+                updateTaskMutation.mutate({
+                  id: editingTaskQuery.data.id,
+                  payload: { ...payload, version: editingTaskQuery.data.version }
+                })
+              }
+            />
           )}
         </Modal>
       ) : null}
@@ -483,7 +610,6 @@ function GroupContent({
     <div className="space-y-2">
       {[
         { value: "", label: "No group", description: "Show one flat task list." },
-        { value: "project", label: "Project", description: "Group tasks by project." },
         { value: "department", label: "Department", description: "Group tasks by task department." },
         { value: "person", label: "Person", description: "Group tasks by assigned person." }
       ].map((option) => (
@@ -556,13 +682,41 @@ function Input({
   );
 }
 
+function canEditReportTask(task: ReportTask, user: Person | null) {
+  if (!user) {
+    return false;
+  }
+
+  if (user.role === "ADMIN" || user.role === "MANAGER") {
+    return true;
+  }
+
+  return user.id === task.assignedPersonId || user.id === task.createdByPersonId;
+}
+
+function flattenReportTasks(report: TaskReport | undefined) {
+  if (!report) {
+    return [];
+  }
+
+  if (report.groupBy) {
+    return report.groups.flatMap((group) => group.tasks);
+  }
+
+  return report.tasks;
+}
+
 function TaskTable({
   tasks,
   compactGroup,
+  currentUser,
+  onEditTask,
   onOpenTask
 }: {
   tasks: ReportTask[];
   compactGroup?: GroupBy;
+  currentUser: Person | null;
+  onEditTask: (taskId: number) => void;
   onOpenTask: (taskId: number) => void;
 }) {
   if (!tasks.length) {
@@ -571,13 +725,19 @@ function TaskTable({
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[960px] border-collapse text-center text-sm">
+      <table className="w-full min-w-[960px] table-fixed border-collapse text-center text-sm">
+        <colgroup>
+          <col className="w-[24%]" />
+          {compactGroup !== "department" ? <col className="w-[18%]" /> : null}
+          {compactGroup !== "person" ? <col className="w-[18%]" /> : null}
+          <col className="w-[13%]" />
+          <col className="w-[13%]" />
+          <col className="w-[14%]" />
+          <col className="w-[14%]" />
+        </colgroup>
         <thead className="bg-slate-50 text-xs uppercase text-slate-500">
           <tr>
             <th className="px-4 py-3 font-semibold">Task</th>
-            {compactGroup !== "project" ? (
-              <th className="px-4 py-3 font-semibold">Project</th>
-            ) : null}
             {compactGroup !== "department" ? (
               <th className="px-4 py-3 font-semibold">Department</th>
             ) : null}
@@ -590,24 +750,39 @@ function TaskTable({
         </thead>
         <tbody className="divide-y divide-line">
           {tasks.map((task) => (
-            <tr key={task.id}>
+            <tr key={task.id} className="h-16">
               <td className="px-4 py-3 text-center font-medium">
-                <button
-                  className="focus-ring rounded-sm text-brand hover:underline"
-                  onClick={() => onOpenTask(task.id)}
-                  type="button"
-                >
-                  {task.title}
-                </button>
+                <div className="flex min-w-0 items-center justify-center gap-2">
+                  {canEditReportTask(task, currentUser) ? (
+                    <button
+                      aria-label={`Edit ${task.title}`}
+                      className="focus-ring inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-line bg-white text-slate-600 transition hover:bg-slate-50"
+                      onClick={() => onEditTask(task.id)}
+                      title="Edit task"
+                      type="button"
+                    >
+                      <Pencil size={15} />
+                    </button>
+                  ) : null}
+                  <button
+                    className="focus-ring block min-w-0 truncate rounded-sm text-brand hover:underline"
+                    onClick={() => onOpenTask(task.id)}
+                    title={task.title}
+                    type="button"
+                  >
+                    {task.title}
+                  </button>
+                </div>
               </td>
-              {compactGroup !== "project" ? (
-                <td className="px-4 py-3 text-slate-600">{task.projectName}</td>
-              ) : null}
               {compactGroup !== "department" ? (
-                <td className="px-4 py-3 text-slate-600">{task.departmentName}</td>
+                <td className="truncate px-4 py-3 text-slate-600" title={task.departmentName}>
+                  {task.departmentName}
+                </td>
               ) : null}
               {compactGroup !== "person" ? (
-                <td className="px-4 py-3 text-slate-600">{task.assignedPersonName}</td>
+                <td className="truncate px-4 py-3 text-slate-600" title={task.assignedPersonName}>
+                  {task.assignedPersonName}
+                </td>
               ) : null}
               <td className="px-4 py-3 text-center">
                 <span className={`rounded-full border px-2 py-1 text-xs font-medium ${priorityBadgeClasses[task.priority]}`}>

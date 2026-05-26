@@ -7,6 +7,7 @@ type TaskFormProps = {
   people: Person[];
   departments: Department[];
   task?: Task;
+  canEditStatus?: boolean;
   onSubmit: (payload: {
     title: string;
     description: string | null;
@@ -19,7 +20,14 @@ type TaskFormProps = {
   isSubmitting: boolean;
 };
 
-export function TaskForm({ people, departments, task, onSubmit, isSubmitting }: TaskFormProps) {
+export function TaskForm({
+  people,
+  departments,
+  task,
+  canEditStatus = true,
+  onSubmit,
+  isSubmitting
+}: TaskFormProps) {
   const [title, setTitle] = useState(task?.title ?? "");
   const [description, setDescription] = useState(task?.description ?? "");
   const [departmentId, setDepartmentId] = useState(task?.departmentId ?? 0);
@@ -99,7 +107,8 @@ export function TaskForm({ people, departments, task, onSubmit, isSubmitting }: 
         <label className="block">
           <span className="text-sm font-medium">Status</span>
           <select
-            className="focus-ring mt-1 w-full rounded-md border border-line px-3 py-2"
+            className="focus-ring mt-1 w-full rounded-md border border-line px-3 py-2 disabled:bg-slate-50 disabled:text-slate-500"
+            disabled={task ? canEditStatus === false : false}
             value={status}
             onChange={(event) => setStatus(event.target.value as TaskStatus)}
           >

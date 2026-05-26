@@ -1,6 +1,6 @@
-import { Prisma, type TaskPriority, type TaskStatus } from "@prisma/client";
+import { Prisma, type TaskPriority, type TaskStatus, type UserRole } from "@prisma/client";
 import type { z } from "zod";
-import { BadRequestError, ConflictError, NotFoundError } from "../../middleware/error-handler.js";
+import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../middleware/error-handler.js";
 import { prisma } from "../../db/prisma.js";
 import type {
   createTaskNoteSchema,
@@ -104,6 +104,16 @@ async function getActorName(actorId?: number) {
   return actor?.name ?? null;
 }
 
+async function getTaskCreatorId(taskId: number) {
+  const createdLog = await prisma.taskLog.findFirst({
+    where: { taskId, type: "TASK_CREATED" },
+    orderBy: { createdAt: "asc" },
+    select: { actorId: true }
+  });
+
+  return createdLog?.actorId ?? null;
+}
+
 export async function createTask(
   projectId: number,
   input: z.infer<typeof createTaskSchema>,
@@ -153,7 +163,7 @@ export async function createTask(
 export async function updateTask(
   taskId: number,
   input: z.infer<typeof updateTaskSchema>,
-  actorId?: number
+  actor?: { id: number; role: UserRole }
 ) {
   const existing = await prisma.task.findUnique({
     where: { id: taskId },
@@ -162,6 +172,28 @@ export async function updateTask(
 
   if (!existing) {
     throw new NotFoundError("Task not found");
+  }
+
+  const creatorId = await getTaskCreatorId(taskId);
+  const canEditTask =
+    Boolean(actor) &&
+    (actor?.role === "ADMIN" ||
+      actor?.role === "MANAGER" ||
+      actor?.id === existing.assignedPersonId ||
+      actor?.id === creatorId);
+
+  if (!canEditTask) {
+    throw new ForbiddenError("Only admins, managers, the task creator, or assigned person can edit this task");
+  }
+
+  if (input.status && input.status !== existing.status) {
+    const canChangeStatus =
+      Boolean(actor) &&
+      (actor?.id === existing.assignedPersonId || actor?.id === creatorId);
+
+    if (!canChangeStatus) {
+      throw new ForbiddenError("Only the task creator or assigned person can change task status");
+    }
   }
 
   await ensureAssignedPersonExists(input.assignedPersonId);
@@ -178,7 +210,7 @@ export async function updateTask(
     input.assignedPersonId !== undefined && input.assignedPersonId !== null
       ? await prisma.person.findUnique({ where: { id: input.assignedPersonId } })
       : null;
-  const actorName = await getActorName(actorId);
+  const actorName = await getActorName(actor?.id);
   const { version, ...taskInput } = input;
 
   return prisma.$transaction(async (tx) => {
@@ -205,7 +237,7 @@ export async function updateTask(
       await tx.taskLog.create({
         data: {
           taskId,
-          actorId,
+          actorId: actor?.id,
           type: "ASSIGNEE_CHANGED",
           message: `${formatActorName(actorName)} changed assignee from ${fromName} to ${toName}.`,
           metadata: {
@@ -220,7 +252,7 @@ export async function updateTask(
       await tx.taskLog.create({
         data: {
           taskId,
-          actorId,
+          actorId: actor?.id,
           type: "PRIORITY_CHANGED",
           message: `${formatActorName(actorName)} changed priority from ${formatPriorityLabel(existing.priority)} to ${formatPriorityLabel(taskInput.priority)}.`,
           metadata: {
@@ -307,6 +339,7 @@ function getIncompleteDurationDays(task: { status: TaskStatus; startDate: Date |
 
 type ReportTask = {
   id: number;
+  createdByPersonId: number | null;
   title: string;
   projectId: number;
   projectName: string;
@@ -356,10 +389,24 @@ async function listReportTasks(query: ReportQuery): Promise<ReportTask[]> {
     where,
     include: taskInclude
   });
+  const taskIds = tasks.map((task) => task.id);
+  const createdLogs = await prisma.taskLog.findMany({
+    where: { taskId: { in: taskIds }, type: "TASK_CREATED" },
+    orderBy: { createdAt: "asc" },
+    select: { taskId: true, actorId: true }
+  });
+  const creatorByTaskId = new Map<number, number | null>();
+
+  for (const log of createdLogs) {
+    if (!creatorByTaskId.has(log.taskId)) {
+      creatorByTaskId.set(log.taskId, log.actorId);
+    }
+  }
 
   return tasks
     .map((task) => ({
       id: task.id,
+      createdByPersonId: creatorByTaskId.get(task.id) ?? null,
       title: task.title,
       projectId: task.projectId,
       projectName: task.project.name,

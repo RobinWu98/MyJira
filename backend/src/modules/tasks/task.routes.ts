@@ -90,11 +90,11 @@ taskRouter.post("/:taskId/logs", requireAuth, async (req, res, next) => {
   }
 });
 
-taskRouter.patch("/:taskId", optionalAuth, async (req, res, next) => {
+taskRouter.patch("/:taskId", requireAuth, async (req, res, next) => {
   try {
     const { taskId } = taskIdParamsSchema.parse(req.params);
     const input = updateTaskSchema.parse(req.body);
-    res.json(await updateTask(taskId, input, req.user?.id));
+    res.json(await updateTask(taskId, input, req.user!));
   } catch (error) {
     next(error);
   }

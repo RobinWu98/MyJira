@@ -77,6 +77,7 @@ export type ProjectDetail = {
 
 export type ReportTask = {
   id: number;
+  createdByPersonId: number | null;
   title: string;
   projectId: number;
   projectName: string;

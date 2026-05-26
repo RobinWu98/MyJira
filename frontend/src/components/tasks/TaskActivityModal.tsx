@@ -1,14 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Send } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { createTaskNote, fetchTaskLogs } from "../../api/tasks";
+import { createTaskNote, fetchTaskLogs, updateTask } from "../../api/tasks";
 import { useAuth } from "../../auth/AuthContext";
-import type { Task, TaskLog, TaskLogType } from "../../types";
+import type { Task, TaskLog, TaskLogType, TaskStatus } from "../../types";
 import {
   formatDate,
   priorityBadgeClasses,
   priorityLabels,
   statusBadgeClasses,
+  statuses,
   statusLabels
 } from "../../utils/labels";
 import { Button } from "../ui/Button";
@@ -36,12 +37,31 @@ export function TaskActivityModal({ task }: TaskActivityModalProps) {
   });
 
   const conversationLogs = useMemo(() => [...(logsQuery.data ?? [])].reverse(), [logsQuery.data]);
+  const creatorId = useMemo(
+    () =>
+      (logsQuery.data ?? [])
+        .filter((log) => log.type === "TASK_CREATED")
+        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())[0]?.actorId ??
+      null,
+    [logsQuery.data]
+  );
+  const canChangeStatus =
+    Boolean(user) && (user?.id === task.assignedPersonId || user?.id === creatorId);
 
   const noteMutation = useMutation({
     mutationFn: () => createTaskNote(task.id, message),
     onSuccess: () => {
       setMessage("");
       queryClient.invalidateQueries({ queryKey: ["tasks", task.id, "logs"] });
+    }
+  });
+
+  const statusMutation = useMutation({
+    mutationFn: (status: TaskStatus) => updateTask(task.id, { status, version: task.version }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tasks", task.id] });
+      queryClient.invalidateQueries({ queryKey: ["task-report"] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
     }
   });
 
@@ -73,11 +93,38 @@ export function TaskActivityModal({ task }: TaskActivityModalProps) {
             <span className={`inline-flex rounded-full border px-2 py-1 text-xs font-medium ${priorityBadgeClasses[task.priority]}`}>
               {priorityLabels[task.priority]}
             </span>
-            <span className={`inline-flex rounded-full border px-2 py-1 text-xs font-medium ${statusBadgeClasses[task.status]}`}>
-              {statusLabels[task.status]}
-            </span>
+            <label className="inline-flex items-center gap-2">
+              <span className={`rounded-full border px-2 py-1 text-xs font-medium ${statusBadgeClasses[task.status]}`}>
+                Status
+              </span>
+              <select
+                className="focus-ring h-8 rounded-md border border-line bg-white px-2 text-xs disabled:bg-slate-50 disabled:text-slate-500"
+                disabled={!canChangeStatus || statusMutation.isPending}
+                value={task.status}
+                onChange={(event) => statusMutation.mutate(event.target.value as TaskStatus)}
+                title={
+                  canChangeStatus
+                    ? "Change task status"
+                    : "Only the task creator or assigned person can change status"
+                }
+              >
+                {statuses.map((status) => (
+                  <option key={status} value={status}>
+                    {statusLabels[status]}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
         </div>
+        {!canChangeStatus ? (
+          <p className="mt-2 text-xs text-slate-500">
+            Only the task creator or assigned person can change status.
+          </p>
+        ) : null}
+        {statusMutation.isError ? (
+          <p className="mt-2 text-xs text-red-700">Could not update status.</p>
+        ) : null}
         <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-600">
           <span className="rounded-full bg-slate-100 px-2 py-1">
             {task.assignedPerson?.name ?? "Unassigned"}
