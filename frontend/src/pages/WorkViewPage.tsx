@@ -160,7 +160,7 @@ export function WorkViewPage() {
         <header className="mb-4 border-b border-line pb-4">
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-semibold tracking-normal">Company tasks</h1>
+              <h1 className="text-2xl font-bold tracking-normal">Company tasks</h1>
               <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
                 {totalTasks}
               </span>
@@ -310,8 +310,8 @@ export function WorkViewPage() {
                 key={`${group.groupId ?? "none"}-${group.groupName}`}
                 className="rounded-lg border border-line bg-white"
               >
-                <div className="border-b border-line px-4 py-3">
-                  <h2 className="font-semibold">{group.groupName}</h2>
+                <div className="border-b border-line bg-sky-50 px-4 py-3">
+                  <h2 className="font-bold">{group.groupName}</h2>
                   <p className="text-sm text-slate-500">{group.tasks.length} tasks</p>
                 </div>
                 <TaskTable
@@ -787,24 +787,24 @@ function TaskTable({
       <table className="w-full min-w-[960px] table-fixed border-collapse text-center text-sm">
         <colgroup>
           <col className="w-[24%]" />
+          <col className="w-[13%]" />
+          <col className="w-[13%]" />
           {compactGroup !== "department" ? <col className="w-[18%]" /> : null}
           {compactGroup !== "person" ? <col className="w-[18%]" /> : null}
-          <col className="w-[13%]" />
-          <col className="w-[13%]" />
           <col className="w-[14%]" />
           <col className="w-[14%]" />
         </colgroup>
         <thead className="bg-slate-50 text-xs uppercase text-slate-500">
           <tr>
-            <th className="px-4 py-3 pl-14 text-left font-semibold">Task</th>
+            <th className="px-4 py-3 pl-14 text-left font-bold">Task</th>
+            <th className="px-4 py-3 font-bold">Status</th>
+            <th className="px-4 py-3 font-bold">Priority</th>
             {compactGroup !== "department" ? (
-              <th className="px-4 py-3 font-semibold">Department</th>
+              <th className="px-4 py-3 font-bold">Department</th>
             ) : null}
-            {compactGroup !== "person" ? <th className="px-4 py-3 font-semibold">Person</th> : null}
-            <th className="px-4 py-3 font-semibold">Priority</th>
-            <th className="px-4 py-3 font-semibold">Status</th>
-            <th className="px-4 py-3 font-semibold">Start date</th>
-            <th className="px-4 py-3 font-semibold">Open duration</th>
+            {compactGroup !== "person" ? <th className="px-4 py-3 font-bold">Person</th> : null}
+            <th className="px-4 py-3 font-bold">Start date</th>
+            <th className="px-4 py-3 font-bold">Open duration</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-line">
@@ -826,7 +826,7 @@ function TaskTable({
                     <span aria-hidden="true" className="inline-flex h-8 w-8 shrink-0" />
                   )}
                   <button
-                    className="focus-ring block min-w-0 truncate rounded-sm text-center text-brand hover:underline"
+                    className="focus-ring block min-w-0 truncate rounded-sm text-center font-bold text-brand hover:underline"
                     onClick={() => onOpenTask(task.id)}
                     title={task.title}
                     type="button"
@@ -844,6 +844,16 @@ function TaskTable({
                   ) : null}
                 </div>
               </td>
+              <td className="px-4 py-3 text-center">
+                <span className={`rounded-full border px-2 py-1 text-xs font-medium ${statusBadgeClasses[task.status]}`}>
+                  {statusLabels[task.status]}
+                </span>
+              </td>
+              <td className="px-4 py-3 text-center">
+                <span className={`rounded-full border px-2 py-1 text-xs font-medium ${priorityBadgeClasses[task.priority]}`}>
+                  {priorityLabels[task.priority]}
+                </span>
+              </td>
               {compactGroup !== "department" ? (
                 <td className="truncate px-4 py-3 text-slate-600" title={task.departmentName}>
                   {task.departmentName}
@@ -854,16 +864,6 @@ function TaskTable({
                   {task.assignedPersonName}
                 </td>
               ) : null}
-              <td className="px-4 py-3 text-center">
-                <span className={`rounded-full border px-2 py-1 text-xs font-medium ${priorityBadgeClasses[task.priority]}`}>
-                  {priorityLabels[task.priority]}
-                </span>
-              </td>
-              <td className="px-4 py-3 text-center">
-                <span className={`rounded-full border px-2 py-1 text-xs font-medium ${statusBadgeClasses[task.status]}`}>
-                  {statusLabels[task.status]}
-                </span>
-              </td>
               <td className="px-4 py-3 text-slate-600">
                 {task.startDate ? formatDate(task.startDate) : "No start date"}
               </td>
@@ -884,14 +884,14 @@ function TaskTable({
               <td className="px-4 py-3 text-left font-medium text-slate-500">
                 {emptyTaskLabel}
               </td>
+              <td className="px-4 py-3 text-slate-500">-</td>
+              <td className="px-4 py-3 text-slate-500">-</td>
               {compactGroup !== "department" ? (
                 <td className="px-4 py-3 text-slate-500">-</td>
               ) : null}
               {compactGroup !== "person" ? (
                 <td className="px-4 py-3 text-slate-500">-</td>
               ) : null}
-              <td className="px-4 py-3 text-slate-500">-</td>
-              <td className="px-4 py-3 text-slate-500">-</td>
               <td className="px-4 py-3 text-slate-500">-</td>
               <td className="px-4 py-3 text-slate-500">-</td>
             </tr>

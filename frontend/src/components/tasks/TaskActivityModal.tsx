@@ -193,11 +193,6 @@ export function TaskActivityModal({ task, people }: TaskActivityModalProps) {
             </span>
           )}
         </div>
-        {!canEditCondition ? (
-          <p className="mt-2 text-xs text-slate-500">
-            Only admins, managers, the task creator, or assigned person can change priority and status.
-          </p>
-        ) : null}
         {statusMutation.isError ? (
           <p className="mt-2 text-xs text-red-700">Could not update status.</p>
         ) : null}
