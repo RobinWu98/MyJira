@@ -1,6 +1,6 @@
 export type TaskStatus = "TODO" | "IN_PROGRESS" | "DONE";
 export type TaskPriority = "HIGH" | "NORMAL" | "LOW";
-export type GroupBy = "department" | "person" | "project";
+export type GroupBy = "department" | "person";
 export type UserRole = "ADMIN" | "MANAGER" | "USER";
 export type TaskLogType = "TASK_CREATED" | "ASSIGNEE_CHANGED" | "PRIORITY_CHANGED" | "NOTE";
 
@@ -24,29 +24,9 @@ export type Person = {
   department?: Department | null;
 };
 
-export type ProjectSummary = {
-  id: number;
-  name: string;
-  description: string | null;
-  createdByPersonId: number;
-  startDate: string | null;
-  createdAt: string;
-  updatedAt: string;
-  createdBy: Person;
-  tasks: {
-    id: number;
-    status: TaskStatus;
-    completedAt: string | null;
-    updatedAt: string;
-  }[];
-  _count: {
-    tasks: number;
-  };
-};
-
 export type Task = {
   id: number;
-  projectId: number;
+  createdByPersonId: number | null;
   departmentId: number | null;
   title: string;
   description: string | null;
@@ -59,28 +39,16 @@ export type Task = {
   version: number;
   createdAt: string;
   updatedAt: string;
+  createdBy: Person | null;
   department: Department | null;
   assignedPerson: Person | null;
-};
-
-export type ProjectDetail = {
-  id: number;
-  name: string;
-  description: string | null;
-  createdByPersonId: number;
-  startDate: string | null;
-  createdAt: string;
-  updatedAt: string;
-  createdBy: Person;
-  tasks: Task[];
 };
 
 export type ReportTask = {
   id: number;
   createdByPersonId: number | null;
+  unreadNotificationCount: number;
   title: string;
-  projectId: number;
-  projectName: string;
   departmentId: number | null;
   departmentName: string;
   assignedPersonId: number | null;
@@ -116,4 +84,16 @@ export type TaskLog = {
   metadata: unknown;
   createdAt: string;
   actor: Person | null;
+};
+
+export type TaskNotification = {
+  id: number;
+  taskId: number;
+  recipientId: number;
+  actorId: number | null;
+  taskLogId: number | null;
+  message: string;
+  isRead: boolean;
+  createdAt: string;
+  readAt: string | null;
 };

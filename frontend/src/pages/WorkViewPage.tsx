@@ -1,11 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowDownUp, Filter, FolderKanban, Pencil, Plus, RotateCcw, Search, UserCircle } from "lucide-react";
+import { ArrowDownUp, Bell, BellRing, Filter, FolderKanban, Pencil, Plus, RotateCcw, Search, UserCircle } from "lucide-react";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchDepartments } from "../api/departments";
 import { fetchPeople } from "../api/people";
-import { fetchProjects } from "../api/projects";
 import { createTask, fetchTask, fetchTaskReport, updateTask, type TaskReportQuery } from "../api/tasks";
 import { useAuth } from "../auth/AuthContext";
 import { TaskActivityModal } from "../components/tasks/TaskActivityModal";
@@ -55,10 +54,10 @@ export function WorkViewPage() {
   const [filters, setFilters] = useState(defaultFilters);
   const [search, setSearch] = useState("");
   const [openPopover, setOpenPopover] = useState<PopoverName>(null);
+  const [showNotificationsOnly, setShowNotificationsOnly] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
   const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
-  const [selectedProjectId, setSelectedProjectId] = useState(0);
 
   const departmentsQuery = useQuery({
     queryKey: ["departments"],
@@ -68,11 +67,6 @@ export function WorkViewPage() {
   const peopleQuery = useQuery({
     queryKey: ["people"],
     queryFn: fetchPeople
-  });
-
-  const projectsQuery = useQuery({
-    queryKey: ["projects"],
-    queryFn: fetchProjects
   });
 
   const reportQueryPayload: TaskReportQuery = useMemo(
@@ -109,10 +103,9 @@ export function WorkViewPage() {
   });
 
   const createTaskMutation = useMutation({
-    mutationFn: (payload: Parameters<typeof createTask>[1]) => createTask(selectedProjectId, payload),
+    mutationFn: createTask,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["task-report"] });
-      queryClient.invalidateQueries({ queryKey: ["projects"] });
       setIsTaskFormOpen(false);
     }
   });
@@ -123,16 +116,23 @@ export function WorkViewPage() {
     onSuccess: (_task, variables) => {
       queryClient.invalidateQueries({ queryKey: ["tasks", variables.id] });
       queryClient.invalidateQueries({ queryKey: ["task-report"] });
-      queryClient.invalidateQueries({ queryKey: ["projects"] });
       setEditingTaskId(null);
     }
   });
 
   const departments = departmentsQuery.data ?? [];
   const people = peopleQuery.data ?? [];
-  const projects = projectsQuery.data ?? [];
   const report = reportQuery.data;
-  const visibleReport = useMemo(() => filterReportBySearch(report, search), [report, search]);
+  const visibleReport = useMemo(
+    () => filterReportByNotifications(filterReportBySearch(report, search), showNotificationsOnly),
+    [report, search, showNotificationsOnly]
+  );
+  const unreadNotificationTotal = useMemo(() => countUnreadNotifications(report), [report]);
+  const shouldPrioritizeCurrentUser = isDefaultPersonView(filters, search, showNotificationsOnly);
+  const visiblePersonGroups = useMemo(
+    () => buildPersonGroups(visibleReport, people, auth.user, shouldPrioritizeCurrentUser, shouldPrioritizeCurrentUser),
+    [visibleReport, people, auth.user, shouldPrioritizeCurrentUser]
+  );
   const reportTasks = useMemo(() => flattenReportTasks(report), [report]);
   const editingReportTask = reportTasks.find((task) => task.id === editingTaskId);
   const canEditEditingTaskStatus =
@@ -157,7 +157,7 @@ export function WorkViewPage() {
           </Link>
         </div>
 
-        <header className="mb-4 flex flex-col gap-4 border-b border-line pb-4 lg:flex-row lg:items-center lg:justify-between">
+        <header className="mb-4 border-b border-line pb-4">
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-2xl font-semibold tracking-normal">Company tasks</h1>
@@ -165,19 +165,10 @@ export function WorkViewPage() {
                 {totalTasks}
               </span>
             </div>
-            <p className="mt-1 text-sm text-slate-500">
-              Filter, sort, and optionally group task work across projects.
-            </p>
           </div>
 
-          <div className="relative flex flex-wrap items-center justify-start gap-2 lg:justify-end">
-            <Button
-              disabled={!projects.length}
-              onClick={() => {
-                setSelectedProjectId((current) => current || projects[0]?.id || 0);
-                setIsTaskFormOpen(true);
-              }}
-            >
+          <div className="relative mt-4 flex flex-wrap items-center justify-start gap-2">
+            <Button onClick={() => setIsTaskFormOpen(true)}>
               <Plus size={16} />
               Create Task
             </Button>
@@ -193,6 +184,18 @@ export function WorkViewPage() {
                 onChange={(event) => setSearch(event.target.value)}
               />
             </label>
+            <ToolbarButton
+              active={showNotificationsOnly}
+              onClick={() => setShowNotificationsOnly((current) => !current)}
+            >
+              {showNotificationsOnly ? <BellRing size={16} /> : <Bell size={16} />}
+              Notifications
+              {unreadNotificationTotal ? (
+                <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
+                  {unreadNotificationTotal}
+                </span>
+              ) : null}
+            </ToolbarButton>
             <ToolbarButton
               active={openPopover === "filter"}
               onClick={() => setOpenPopover((current) => (current === "filter" ? null : "filter"))}
@@ -219,6 +222,7 @@ export function WorkViewPage() {
               onClick={() => {
                 setFilters(defaultFilters);
                 setSearch("");
+                setShowNotificationsOnly(false);
                 setOpenPopover(null);
               }}
             >
@@ -253,6 +257,11 @@ export function WorkViewPage() {
 
         {chips.length ? (
           <div className="mb-4 flex flex-wrap gap-2">
+            {showNotificationsOnly ? (
+              <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs text-amber-800">
+                Notifications only
+              </span>
+            ) : null}
             {search ? (
               <span className="rounded-full border border-line bg-white px-3 py-1 text-xs text-slate-600">
                 Search: {search}
@@ -267,11 +276,18 @@ export function WorkViewPage() {
               </span>
             ))}
           </div>
-        ) : search ? (
+        ) : search || showNotificationsOnly ? (
           <div className="mb-4 flex flex-wrap gap-2">
-            <span className="rounded-full border border-line bg-white px-3 py-1 text-xs text-slate-600">
-              Search: {search}
-            </span>
+            {showNotificationsOnly ? (
+              <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs text-amber-800">
+                Notifications only
+              </span>
+            ) : null}
+            {search ? (
+              <span className="rounded-full border border-line bg-white px-3 py-1 text-xs text-slate-600">
+                Search: {search}
+              </span>
+            ) : null}
           </div>
         ) : null}
 
@@ -285,7 +301,7 @@ export function WorkViewPage() {
           </div>
         ) : visibleReport?.groupBy ? (
           <div className="space-y-5">
-            {visibleReport.groups.map((group) => (
+            {(visibleReport.groupBy === "person" ? visiblePersonGroups : visibleReport.groups).map((group) => (
               <section
                 key={`${group.groupId ?? "none"}-${group.groupName}`}
                 className="rounded-lg border border-line bg-white"
@@ -298,6 +314,7 @@ export function WorkViewPage() {
                   tasks={group.tasks}
                   compactGroup={visibleReport.groupBy}
                   currentUser={auth.user}
+                  emptyTaskLabel={visibleReport.groupBy === "person" ? "No tasks assigned" : "No matching tasks"}
                   onEditTask={setEditingTaskId}
                   onOpenTask={setSelectedTaskId}
                 />
@@ -308,6 +325,7 @@ export function WorkViewPage() {
                 <TaskTable
                   tasks={[]}
                   currentUser={auth.user}
+                  emptyTaskLabel="No matching tasks"
                   onEditTask={setEditingTaskId}
                   onOpenTask={setSelectedTaskId}
                 />
@@ -319,6 +337,7 @@ export function WorkViewPage() {
             <TaskTable
               tasks={visibleReport?.tasks ?? []}
               currentUser={auth.user}
+              emptyTaskLabel="No matching tasks"
               onEditTask={setEditingTaskId}
               onOpenTask={setSelectedTaskId}
             />
@@ -337,39 +356,19 @@ export function WorkViewPage() {
               Could not load this task.
             </div>
           ) : (
-            <TaskActivityModal task={selectedTaskQuery.data} />
+            <TaskActivityModal people={people} task={selectedTaskQuery.data} />
           )}
         </Modal>
       ) : null}
 
       {isTaskFormOpen ? (
         <Modal title="Create task" onClose={() => setIsTaskFormOpen(false)}>
-          <div className="space-y-4">
-            <label className="block">
-              <span className="text-sm font-medium">Project</span>
-              <select
-                className="focus-ring mt-1 w-full rounded-md border border-line px-3 py-2"
-                value={selectedProjectId}
-                onChange={(event) => setSelectedProjectId(Number(event.target.value))}
-              >
-                {projects.map((project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <TaskForm
-              people={people}
-              departments={departments}
-              isSubmitting={createTaskMutation.isPending || !selectedProjectId}
-              onSubmit={(payload) => {
-                if (selectedProjectId) {
-                  createTaskMutation.mutate(payload);
-                }
-              }}
-            />
-          </div>
+          <TaskForm
+            people={people}
+            departments={departments}
+            isSubmitting={createTaskMutation.isPending}
+            onSubmit={(payload) => createTaskMutation.mutate(payload)}
+          />
         </Modal>
       ) : null}
 
@@ -706,23 +705,79 @@ function flattenReportTasks(report: TaskReport | undefined) {
   return report.tasks;
 }
 
+function isDefaultPersonView(filters: typeof defaultFilters, search: string, showNotificationsOnly: boolean) {
+  return (
+    filters.groupBy === "person" &&
+    !search.trim() &&
+    !showNotificationsOnly &&
+    !filters.priority &&
+    !filters.status &&
+    !filters.statusNot &&
+    !filters.departmentId &&
+    !filters.assignedPersonId &&
+    !filters.startDateFrom &&
+    !filters.startDateTo &&
+    filters.incompleteForMoreThanDays === ""
+  );
+}
+
+function buildPersonGroups(
+  report: TaskReport | undefined,
+  people: Person[],
+  currentUser: Person | null,
+  prioritizeCurrentUser: boolean,
+  includeEmptyPeople: boolean
+) {
+  if (!report || report.groupBy !== "person") {
+    return [];
+  }
+
+  const groupByPersonId = new Map(
+    report.groups.map((group) => [group.groupId, group])
+  );
+  const orderedPeople =
+    prioritizeCurrentUser && currentUser
+      ? [
+          ...people.filter((person) => person.id === currentUser.id),
+          ...people.filter((person) => person.id !== currentUser.id)
+        ]
+      : people;
+  const groups: { groupId: number | null; groupName: string; tasks: ReportTask[] }[] = orderedPeople.map((person) => ({
+    groupId: person.id,
+    groupName: person.id === currentUser?.id ? `${person.name} (me)` : person.name,
+    tasks: groupByPersonId.get(person.id)?.tasks ?? []
+  })).filter((group) => includeEmptyPeople || group.tasks.length > 0);
+  const unassignedGroup = groupByPersonId.get(null);
+
+  if (unassignedGroup?.tasks.length) {
+    groups.push(unassignedGroup);
+  }
+
+  return groups;
+}
+
+function countUnreadNotifications(report: TaskReport | undefined) {
+  return flattenReportTasks(report).reduce(
+    (sum, task) => sum + task.unreadNotificationCount,
+    0
+  );
+}
+
 function TaskTable({
   tasks,
   compactGroup,
   currentUser,
+  emptyTaskLabel = "No matching tasks",
   onEditTask,
   onOpenTask
 }: {
   tasks: ReportTask[];
   compactGroup?: GroupBy;
   currentUser: Person | null;
+  emptyTaskLabel?: string;
   onEditTask: (taskId: number) => void;
   onOpenTask: (taskId: number) => void;
 }) {
-  if (!tasks.length) {
-    return <div className="p-6 text-sm text-slate-500">No matching tasks.</div>;
-  }
-
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[960px] table-fixed border-collapse text-center text-sm">
@@ -749,7 +804,7 @@ function TaskTable({
           </tr>
         </thead>
         <tbody className="divide-y divide-line">
-          {tasks.map((task) => (
+          {tasks.length ? tasks.map((task) => (
             <tr key={task.id} className="h-16">
               <td className="px-4 py-3 text-center font-medium">
                 <div className="flex min-w-0 items-center justify-center gap-2">
@@ -772,6 +827,15 @@ function TaskTable({
                   >
                     {task.title}
                   </button>
+                  {task.unreadNotificationCount > 0 ? (
+                    <span
+                      className="inline-flex shrink-0 items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700"
+                      title="You were mentioned in this task"
+                    >
+                      <Bell size={14} />
+                      {task.unreadNotificationCount}
+                    </span>
+                  ) : null}
                 </div>
               </td>
               {compactGroup !== "department" ? (
@@ -803,7 +867,23 @@ function TaskTable({
                   : `${task.incompleteDurationDays} days`}
               </td>
             </tr>
-          ))}
+          )) : (
+            <tr className="h-16">
+              <td className="px-4 py-3 text-center font-medium text-slate-500">
+                {emptyTaskLabel}
+              </td>
+              {compactGroup !== "department" ? (
+                <td className="px-4 py-3 text-slate-500">-</td>
+              ) : null}
+              {compactGroup !== "person" ? (
+                <td className="px-4 py-3 text-slate-500">-</td>
+              ) : null}
+              <td className="px-4 py-3 text-slate-500">-</td>
+              <td className="px-4 py-3 text-slate-500">-</td>
+              <td className="px-4 py-3 text-slate-500">-</td>
+              <td className="px-4 py-3 text-slate-500">-</td>
+            </tr>
+          )}
         </tbody>
       </table>
     </div>
@@ -855,12 +935,7 @@ function buildActiveChips(
   }
 
   if (filters.groupBy) {
-    const groupLabel =
-      filters.groupBy === "department"
-        ? "Department"
-        : filters.groupBy === "person"
-          ? "Person"
-          : "Project";
+    const groupLabel = filters.groupBy === "department" ? "Department" : "Person";
     chips.push(`Group: ${groupLabel}`);
   }
 
@@ -881,7 +956,6 @@ function filterReportBySearch(report: TaskReport | undefined, search: string) {
   const matches = (task: ReportTask) =>
     [
       task.title,
-      task.projectName,
       task.departmentName,
       task.assignedPersonName,
       priorityLabels[task.priority],
@@ -906,5 +980,30 @@ function filterReportBySearch(report: TaskReport | undefined, search: string) {
   return {
     ...report,
     tasks: report.tasks.filter(matches)
+  };
+}
+
+function filterReportByNotifications(report: TaskReport | undefined, enabled: boolean) {
+  if (!report || !enabled) {
+    return report;
+  }
+
+  const hasNotification = (task: ReportTask) => task.unreadNotificationCount > 0;
+
+  if (report.groupBy) {
+    return {
+      ...report,
+      groups: report.groups
+        .map((group) => ({
+          ...group,
+          tasks: group.tasks.filter(hasNotification)
+        }))
+        .filter((group) => group.tasks.length > 0)
+    };
+  }
+
+  return {
+    ...report,
+    tasks: report.tasks.filter(hasNotification)
   };
 }

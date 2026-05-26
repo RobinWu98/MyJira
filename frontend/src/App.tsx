@@ -34,10 +34,6 @@ export function App() {
         }
       />
       <Route path="/work" element={<Navigate to="/" replace />} />
-      <Route
-        path="/projects/:projectId"
-        element={auth.isAuthenticated ? <Navigate to="/" replace /> : <Navigate to="/login" replace />}
-      />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

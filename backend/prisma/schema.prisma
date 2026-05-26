@@ -19,9 +19,10 @@ model Person {
   updatedAt     DateTime @updatedAt
 
   department      Department? @relation(fields: [departmentId], references: [id])
-  projectsCreated Project[] @relation("ProjectCreator")
   assignedTasks    Task[]   @relation("TaskAssignee")
+  tasksCreated     Task[]   @relation("TaskCreator")
   taskLogs         TaskLog[] @relation("TaskLogActor")
+  taskNotifications TaskNotification[]
 }
 
 model Department {
@@ -35,22 +36,9 @@ model Department {
   tasks    Task[]
 }
 
-model Project {
-  id                Int      @id @default(autoincrement())
-  name              String
-  description       String?
-  createdByPersonId Int
-  startDate         DateTime?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
-  createdBy Person @relation("ProjectCreator", fields: [createdByPersonId], references: [id])
-  tasks     Task[]
-}
-
 model Task {
   id               Int          @id @default(autoincrement())
-  projectId        Int
+  createdByPersonId Int?
   departmentId     Int?
   title            String
   description      String?
@@ -64,12 +52,13 @@ model Task {
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
 
-  project        Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy      Person? @relation("TaskCreator", fields: [createdByPersonId], references: [id], onDelete: SetNull)
   department     Department? @relation(fields: [departmentId], references: [id])
   assignedPerson Person? @relation("TaskAssignee", fields: [assignedPersonId], references: [id])
   logs           TaskLog[]
+  notifications  TaskNotification[]
 
-  @@index([projectId, status, sortOrder])
+  @@index([status, sortOrder])
 }
 
 model TaskLog {
@@ -85,6 +74,24 @@ model TaskLog {
   actor Person? @relation("TaskLogActor", fields: [actorId], references: [id], onDelete: SetNull)
 
   @@index([taskId, createdAt])
+}
+
+model TaskNotification {
+  id          Int      @id @default(autoincrement())
+  taskId      Int
+  recipientId Int
+  actorId     Int?
+  taskLogId   Int?
+  message     String
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  readAt      DateTime?
+
+  task      Task    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  recipient Person  @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@index([recipientId, isRead, createdAt])
+  @@index([taskId, recipientId, isRead])
 }
 
 enum TaskStatus {

@@ -4,10 +4,6 @@ export const taskIdParamsSchema = z.object({
   taskId: z.coerce.number().int().positive()
 });
 
-export const projectTaskParamsSchema = z.object({
-  projectId: z.coerce.number().int().positive()
-});
-
 export const taskStatusSchema = z.enum(["TODO", "IN_PROGRESS", "DONE"]);
 export const taskPrioritySchema = z.enum(["HIGH", "NORMAL", "LOW"]);
 
@@ -33,19 +29,8 @@ export const updateTaskSchema = z.object({
   startDate: z.coerce.date().optional().nullable()
 });
 
-export const reorderTasksSchema = z.object({
-  tasks: z.array(
-    z.object({
-      id: z.coerce.number().int().positive(),
-      status: taskStatusSchema,
-      sortOrder: z.coerce.number().int().nonnegative(),
-      version: z.coerce.number().int().positive()
-    })
-  )
-});
-
 export const taskReportQuerySchema = z.object({
-  groupBy: z.enum(["department", "person", "project"]).optional(),
+  groupBy: z.enum(["department", "person"]).optional(),
   priority: taskPrioritySchema.optional(),
   status: taskStatusSchema.optional(),
   statusNot: taskStatusSchema.optional(),

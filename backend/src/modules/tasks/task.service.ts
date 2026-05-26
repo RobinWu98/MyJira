@@ -5,7 +5,6 @@ import { prisma } from "../../db/prisma.js";
 import type {
   createTaskNoteSchema,
   createTaskSchema,
-  reorderTasksSchema,
   taskReportQuerySchema,
   updateTaskSchema
 } from "./task.schemas.js";
@@ -13,7 +12,7 @@ import type {
 const taskInclude = {
   department: true,
   assignedPerson: true,
-  project: true
+  createdBy: true
 };
 
 const priorityRank: Record<TaskPriority, number> = {
@@ -23,14 +22,6 @@ const priorityRank: Record<TaskPriority, number> = {
 };
 
 type ReportQuery = z.infer<typeof taskReportQuerySchema>;
-
-async function ensureProjectExists(projectId: number) {
-  const project = await prisma.project.findUnique({ where: { id: projectId } });
-
-  if (!project) {
-    throw new NotFoundError("Project not found");
-  }
-}
 
 async function ensureAssignedPersonExists(personId?: number | null) {
   if (!personId) {
@@ -56,11 +47,8 @@ async function ensureDepartmentExists(departmentId?: number | null) {
   }
 }
 
-export async function listTasks(projectId: number) {
-  await ensureProjectExists(projectId);
-
+export async function listTasks() {
   return prisma.task.findMany({
-    where: { projectId },
     include: taskInclude,
     orderBy: [{ status: "asc" }, { sortOrder: "asc" }]
   });
@@ -105,6 +93,15 @@ async function getActorName(actorId?: number) {
 }
 
 async function getTaskCreatorId(taskId: number) {
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: { createdByPersonId: true }
+  });
+
+  if (task?.createdByPersonId) {
+    return task.createdByPersonId;
+  }
+
   const createdLog = await prisma.taskLog.findFirst({
     where: { taskId, type: "TASK_CREATED" },
     orderBy: { createdAt: "asc" },
@@ -114,17 +111,60 @@ async function getTaskCreatorId(taskId: number) {
   return createdLog?.actorId ?? null;
 }
 
-export async function createTask(
-  projectId: number,
-  input: z.infer<typeof createTaskSchema>,
-  actorId?: number
+async function createAssignmentNotification(
+  tx: Prisma.TransactionClient,
+  taskId: number,
+  assignedPersonId: number | null | undefined,
+  actorId: number | null | undefined,
+  actorName: string | null
 ) {
-  await ensureProjectExists(projectId);
+  if (!assignedPersonId || assignedPersonId === actorId) {
+    return;
+  }
+
+  await tx.taskNotification.create({
+    data: {
+      taskId,
+      recipientId: assignedPersonId,
+      actorId,
+      message: `${formatActorName(actorName)} assigned this task to you.`
+    }
+  });
+}
+
+function normalizeMentionName(value: string) {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+async function findMentionedPeople(message: string, actorId: number) {
+  const people = await prisma.person.findMany({
+    select: { id: true, name: true }
+  });
+  const normalizedMessage = normalizeMentionName(message);
+  const mentioned = new Map<number, { id: number; name: string }>();
+
+  for (const person of people) {
+    if (person.id === actorId) {
+      continue;
+    }
+
+    if (normalizedMessage.includes(`@${normalizeMentionName(person.name)}`)) {
+      mentioned.set(person.id, person);
+    }
+  }
+
+  return [...mentioned.values()];
+}
+
+export async function createTask(
+  input: z.infer<typeof createTaskSchema>,
+  actorId: number
+) {
   await ensureAssignedPersonExists(input.assignedPersonId);
   await ensureDepartmentExists(input.departmentId);
 
   const lastTask = await prisma.task.findFirst({
-    where: { projectId, status: input.status },
+    where: { status: input.status },
     orderBy: { sortOrder: "desc" }
   });
 
@@ -133,7 +173,7 @@ export async function createTask(
   return prisma.$transaction(async (tx) => {
     const task = await tx.task.create({
       data: {
-        projectId,
+        createdByPersonId: actorId,
         departmentId: input.departmentId,
         title: input.title,
         description: input.description,
@@ -155,6 +195,14 @@ export async function createTask(
         message: `${formatActorName(actorName)} created this task.`
       }
     });
+
+    await createAssignmentNotification(
+      tx,
+      task.id,
+      input.assignedPersonId,
+      actorId,
+      actorName
+    );
 
     return task;
   });
@@ -246,6 +294,14 @@ export async function updateTask(
           }
         }
       });
+
+      await createAssignmentNotification(
+        tx,
+        taskId,
+        taskInput.assignedPersonId,
+        actor?.id,
+        actorName
+      );
     }
 
     if (taskInput.priority && taskInput.priority !== existing.priority) {
@@ -286,42 +342,6 @@ export async function deleteTask(taskId: number) {
   await prisma.task.delete({ where: { id: taskId } });
 }
 
-export async function reorderTasks(projectId: number, input: z.infer<typeof reorderTasksSchema>) {
-  await ensureProjectExists(projectId);
-
-  const taskIds = input.tasks.map((task) => task.id);
-  const existingTasks = await prisma.task.findMany({
-    where: { id: { in: taskIds }, projectId },
-    select: { id: true }
-  });
-
-  if (existingTasks.length !== taskIds.length) {
-    throw new BadRequestError("Every reordered task must belong to the project");
-  }
-
-  await prisma.$transaction(
-    async (tx) => {
-      for (const task of input.tasks) {
-        const updateResult = await tx.task.updateMany({
-          where: { id: task.id, projectId, version: task.version },
-          data: {
-            status: task.status,
-            sortOrder: task.sortOrder,
-            completedAt: task.status === "DONE" ? new Date() : null,
-            version: { increment: 1 }
-          }
-        });
-
-        if (updateResult.count === 0) {
-          throw new ConflictError("This board was changed by someone else. Please refresh and try again.");
-        }
-      }
-    }
-  );
-
-  return listTasks(projectId);
-}
-
 function addEndOfDay(date: Date) {
   const next = new Date(date);
   next.setHours(23, 59, 59, 999);
@@ -340,9 +360,8 @@ function getIncompleteDurationDays(task: { status: TaskStatus; startDate: Date |
 type ReportTask = {
   id: number;
   createdByPersonId: number | null;
+  unreadNotificationCount: number;
   title: string;
-  projectId: number;
-  projectName: string;
   departmentId: number | null;
   departmentName: string;
   assignedPersonId: number | null;
@@ -355,7 +374,7 @@ type ReportTask = {
   incompleteDurationDays: number | null;
 };
 
-async function listReportTasks(query: ReportQuery): Promise<ReportTask[]> {
+async function listReportTasks(query: ReportQuery, viewerId?: number): Promise<ReportTask[]> {
   const where: Prisma.TaskWhereInput = {};
 
   if (query.priority) {
@@ -389,27 +408,27 @@ async function listReportTasks(query: ReportQuery): Promise<ReportTask[]> {
     where,
     include: taskInclude
   });
-  const taskIds = tasks.map((task) => task.id);
-  const createdLogs = await prisma.taskLog.findMany({
-    where: { taskId: { in: taskIds }, type: "TASK_CREATED" },
-    orderBy: { createdAt: "asc" },
-    select: { taskId: true, actorId: true }
-  });
-  const creatorByTaskId = new Map<number, number | null>();
-
-  for (const log of createdLogs) {
-    if (!creatorByTaskId.has(log.taskId)) {
-      creatorByTaskId.set(log.taskId, log.actorId);
-    }
-  }
+  const unreadCounts = viewerId
+    ? await prisma.taskNotification.groupBy({
+        by: ["taskId"],
+        where: {
+          recipientId: viewerId,
+          isRead: false,
+          taskId: { in: tasks.map((task) => task.id) }
+        },
+        _count: { _all: true }
+      })
+    : [];
+  const unreadCountByTaskId = new Map(
+    unreadCounts.map((count) => [count.taskId, count._count._all])
+  );
 
   return tasks
     .map((task) => ({
       id: task.id,
-      createdByPersonId: creatorByTaskId.get(task.id) ?? null,
+      createdByPersonId: task.createdByPersonId,
+      unreadNotificationCount: unreadCountByTaskId.get(task.id) ?? 0,
       title: task.title,
-      projectId: task.projectId,
-      projectName: task.project.name,
       departmentId: task.department?.id ?? null,
       departmentName: task.department?.name ?? "No department",
       assignedPersonId: task.assignedPerson?.id ?? null,
@@ -484,8 +503,8 @@ function sortReportTasks(tasks: ReportTask[], sort?: string) {
   });
 }
 
-export async function getTaskReport(query: ReportQuery) {
-  const tasks = sortReportTasks(await listReportTasks(query), query.sort);
+export async function getTaskReport(query: ReportQuery, viewerId?: number) {
+  const tasks = sortReportTasks(await listReportTasks(query, viewerId), query.sort);
 
   if (!query.groupBy) {
     return {
@@ -500,15 +519,11 @@ export async function getTaskReport(query: ReportQuery) {
     const groupId =
       query.groupBy === "department"
         ? task.departmentId
-        : query.groupBy === "person"
-          ? task.assignedPersonId
-          : task.projectId;
+        : task.assignedPersonId;
     const groupName =
       query.groupBy === "department"
         ? task.departmentName
-        : query.groupBy === "person"
-          ? task.assignedPersonName
-          : task.projectName;
+        : task.assignedPersonName;
     const key = `${groupId ?? "none"}:${groupName}`;
 
     if (!groupMap.has(key)) {
@@ -538,6 +553,20 @@ export async function listTaskLogs(taskId: number) {
   });
 }
 
+export async function markTaskNotificationsRead(taskId: number, personId: number) {
+  await prisma.taskNotification.updateMany({
+    where: {
+      taskId,
+      recipientId: personId,
+      isRead: false
+    },
+    data: {
+      isRead: true,
+      readAt: new Date()
+    }
+  });
+}
+
 export async function createTaskNote(
   taskId: number,
   input: z.infer<typeof createTaskNoteSchema>,
@@ -550,17 +579,52 @@ export async function createTaskNote(
   }
 
   const actorName = await getActorName(actorId);
+  const mentionedPeople = await findMentionedPeople(input.message, actorId);
 
-  return prisma.taskLog.create({
-    data: {
+  return prisma.$transaction(async (tx) => {
+    const log = await tx.taskLog.create({
+      data: {
+        taskId,
+        actorId,
+        type: "NOTE",
+        message: input.message,
+        metadata: {
+          actorName: formatActorName(actorName),
+          mentionedPersonIds: mentionedPeople.map((person) => person.id)
+        }
+      },
+      include: { actor: true }
+    });
+
+    if (mentionedPeople.length) {
+      await tx.taskNotification.createMany({
+        data: mentionedPeople.map((person) => ({
+          taskId,
+          recipientId: person.id,
+          actorId,
+          taskLogId: log.id,
+          message: `${formatActorName(actorName)} mentioned you in this task.`
+        }))
+      });
+    }
+
+    return log;
+  });
+}
+
+export async function listTaskNotifications(taskId: number, personId: number) {
+  const task = await prisma.task.findUnique({ where: { id: taskId }, select: { id: true } });
+
+  if (!task) {
+    throw new NotFoundError("Task not found");
+  }
+
+  return prisma.taskNotification.findMany({
+    where: {
       taskId,
-      actorId,
-      type: "NOTE",
-      message: input.message,
-      metadata: {
-        actorName: formatActorName(actorName)
-      }
+      recipientId: personId,
+      isRead: false
     },
-    include: { actor: true }
+    orderBy: { createdAt: "desc" }
   });
 }

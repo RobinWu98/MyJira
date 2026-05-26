@@ -6,57 +6,43 @@ import {
   getTask,
   getTaskReport,
   listTaskLogs,
+  listTaskNotifications,
   listTasks,
-  reorderTasks,
+  markTaskNotificationsRead,
   updateTask
 } from "./task.service.js";
-import { optionalAuth, requireAuth } from "../../middleware/auth.js";
+import { requireAuth } from "../../middleware/auth.js";
 import {
   createTaskNoteSchema,
   createTaskSchema,
-  projectTaskParamsSchema,
-  reorderTasksSchema,
   taskReportQuerySchema,
   taskIdParamsSchema,
   updateTaskSchema
 } from "./task.schemas.js";
 
 export const taskRouter = Router();
-export const projectTaskRouter = Router({ mergeParams: true });
 
-taskRouter.get("/report", async (req, res, next) => {
+taskRouter.get("/report", requireAuth, async (req, res, next) => {
   try {
     const query = taskReportQuerySchema.parse(req.query);
-    res.json(await getTaskReport(query));
+    res.json(await getTaskReport(query, req.user!.id));
   } catch (error) {
     next(error);
   }
 });
 
-projectTaskRouter.get("/", async (req, res, next) => {
+taskRouter.get("/", requireAuth, async (_req, res, next) => {
   try {
-    const { projectId } = projectTaskParamsSchema.parse(req.params);
-    res.json(await listTasks(projectId));
+    res.json(await listTasks());
   } catch (error) {
     next(error);
   }
 });
 
-projectTaskRouter.post("/", optionalAuth, async (req, res, next) => {
+taskRouter.post("/", requireAuth, async (req, res, next) => {
   try {
-    const { projectId } = projectTaskParamsSchema.parse(req.params);
     const input = createTaskSchema.parse(req.body);
-    res.status(201).json(await createTask(projectId, input, req.user?.id));
-  } catch (error) {
-    next(error);
-  }
-});
-
-projectTaskRouter.patch("/reorder", async (req, res, next) => {
-  try {
-    const { projectId } = projectTaskParamsSchema.parse(req.params);
-    const input = reorderTasksSchema.parse(req.body);
-    res.json(await reorderTasks(projectId, input));
+    res.status(201).json(await createTask(input, req.user!.id));
   } catch (error) {
     next(error);
   }
@@ -75,6 +61,25 @@ taskRouter.get("/:taskId/logs", requireAuth, async (req, res, next) => {
   try {
     const { taskId } = taskIdParamsSchema.parse(req.params);
     res.json(await listTaskLogs(taskId));
+  } catch (error) {
+    next(error);
+  }
+});
+
+taskRouter.get("/:taskId/notifications", requireAuth, async (req, res, next) => {
+  try {
+    const { taskId } = taskIdParamsSchema.parse(req.params);
+    res.json(await listTaskNotifications(taskId, req.user!.id));
+  } catch (error) {
+    next(error);
+  }
+});
+
+taskRouter.patch("/:taskId/notifications/read", requireAuth, async (req, res, next) => {
+  try {
+    const { taskId } = taskIdParamsSchema.parse(req.params);
+    await markTaskNotificationsRead(taskId, req.user!.id);
+    res.status(204).send();
   } catch (error) {
     next(error);
   }

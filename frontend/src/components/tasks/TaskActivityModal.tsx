@@ -1,11 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Send } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { createTaskNote, fetchTaskLogs, updateTask } from "../../api/tasks";
-import { useAuth } from "../../auth/AuthContext";
-import type { Task, TaskLog, TaskLogType, TaskStatus } from "../../types";
 import {
-  formatDate,
+  createTaskNote,
+  fetchTaskLogs,
+  fetchTaskNotifications,
+  markTaskNotificationsRead,
+  updateTask
+} from "../../api/tasks";
+import { useAuth } from "../../auth/AuthContext";
+import type { Person, Task, TaskLog, TaskLogType, TaskStatus } from "../../types";
+import {
   priorityBadgeClasses,
   priorityLabels,
   statusBadgeClasses,
@@ -16,6 +21,7 @@ import { Button } from "../ui/Button";
 
 type TaskActivityModalProps = {
   task: Task;
+  people: Person[];
 };
 
 const activityLabels: Record<TaskLogType, string> = {
@@ -25,34 +31,41 @@ const activityLabels: Record<TaskLogType, string> = {
   NOTE: "Note"
 };
 
-export function TaskActivityModal({ task }: TaskActivityModalProps) {
+export function TaskActivityModal({ task, people }: TaskActivityModalProps) {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const [message, setMessage] = useState("");
+  const [mentionQuery, setMentionQuery] = useState("");
+  const [isMentionMenuOpen, setIsMentionMenuOpen] = useState(false);
   const conversationEndRef = useRef<HTMLDivElement | null>(null);
 
   const logsQuery = useQuery({
     queryKey: ["tasks", task.id, "logs"],
     queryFn: () => fetchTaskLogs(task.id)
   });
+  const notificationsQuery = useQuery({
+    queryKey: ["tasks", task.id, "notifications"],
+    queryFn: () => fetchTaskNotifications(task.id)
+  });
 
   const conversationLogs = useMemo(() => [...(logsQuery.data ?? [])].reverse(), [logsQuery.data]);
-  const creatorId = useMemo(
-    () =>
-      (logsQuery.data ?? [])
-        .filter((log) => log.type === "TASK_CREATED")
-        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())[0]?.actorId ??
-      null,
-    [logsQuery.data]
-  );
   const canChangeStatus =
-    Boolean(user) && (user?.id === task.assignedPersonId || user?.id === creatorId);
+    Boolean(user) && (user?.id === task.assignedPersonId || user?.id === task.createdByPersonId);
 
   const noteMutation = useMutation({
     mutationFn: () => createTaskNote(task.id, message),
     onSuccess: () => {
       setMessage("");
       queryClient.invalidateQueries({ queryKey: ["tasks", task.id, "logs"] });
+      queryClient.invalidateQueries({ queryKey: ["task-report"] });
+    }
+  });
+
+  const readMutation = useMutation({
+    mutationFn: () => markTaskNotificationsRead(task.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tasks", task.id, "notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["task-report"] });
     }
   });
 
@@ -61,13 +74,18 @@ export function TaskActivityModal({ task }: TaskActivityModalProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tasks", task.id] });
       queryClient.invalidateQueries({ queryKey: ["task-report"] });
-      queryClient.invalidateQueries({ queryKey: ["projects"] });
     }
   });
 
   useEffect(() => {
     conversationEndRef.current?.scrollIntoView({ block: "end" });
   }, [conversationLogs.length, noteMutation.isSuccess]);
+
+  useEffect(() => {
+    if ((notificationsQuery.data?.length ?? 0) > 0 && !readMutation.isPending) {
+      readMutation.mutate();
+    }
+  }, [notificationsQuery.data?.length]);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -78,6 +96,23 @@ export function TaskActivityModal({ task }: TaskActivityModalProps) {
 
     noteMutation.mutate();
   }
+
+  function handleMessageChange(value: string) {
+    setMessage(value);
+    const mention = getActiveMention(value);
+    setMentionQuery(mention?.query ?? "");
+    setIsMentionMenuOpen(Boolean(mention));
+  }
+
+  function selectMention(name: string) {
+    setMessage((current) => replaceActiveMention(current, name));
+    setMentionQuery("");
+    setIsMentionMenuOpen(false);
+  }
+
+  const mentionOptions = people.filter((person) =>
+    person.name.toLowerCase().includes(mentionQuery.toLowerCase())
+  );
 
   return (
     <div className="flex min-h-[calc(85vh-6rem)] flex-col">
@@ -150,6 +185,7 @@ export function TaskActivityModal({ task }: TaskActivityModalProps) {
               <ConversationEntry
                 key={log.id}
                 log={log}
+                people={people}
                 isOwnNote={log.type === "NOTE" && log.actorId === user?.id}
               />
             ))}
@@ -163,13 +199,45 @@ export function TaskActivityModal({ task }: TaskActivityModalProps) {
       </section>
 
       <form className="sticky bottom-0 shrink-0 border-t border-line bg-white pt-4" onSubmit={handleSubmit}>
-        <div className="flex items-end gap-2">
-          <textarea
-            className="focus-ring min-h-20 flex-1 resize-none rounded-md border border-line px-3 py-2 text-sm"
-            placeholder="Write a note..."
-            value={message}
-            onChange={(event) => setMessage(event.target.value)}
-          />
+        <div className="relative flex items-end gap-2">
+          <div className="relative flex-1">
+            <textarea
+              className="focus-ring min-h-20 w-full resize-none rounded-md border border-line px-3 py-2 text-sm"
+              placeholder="Write a note... use @Name to notify someone"
+              value={message}
+              onBlur={() => {
+                window.setTimeout(() => setIsMentionMenuOpen(false), 120);
+              }}
+              onChange={(event) => handleMessageChange(event.target.value)}
+              onFocus={() => {
+                if (getActiveMention(message)) {
+                  setIsMentionMenuOpen(true);
+                }
+              }}
+            />
+            {isMentionMenuOpen ? (
+              <div className="absolute bottom-full left-0 z-20 mb-2 max-h-56 w-full overflow-y-auto rounded-md border border-line bg-white p-1 shadow-lg">
+                {mentionOptions.length ? (
+                  mentionOptions.map((person) => (
+                    <button
+                      key={person.id}
+                      className="focus-ring flex w-full items-center justify-between rounded px-3 py-2 text-left text-sm hover:bg-slate-50"
+                      onMouseDown={(event) => {
+                        event.preventDefault();
+                        selectMention(person.name);
+                      }}
+                      type="button"
+                    >
+                      <span>{person.name}</span>
+                      <span className="text-xs text-slate-500">{person.department?.name ?? "No department"}</span>
+                    </button>
+                  ))
+                ) : (
+                  <div className="px-3 py-2 text-sm text-slate-500">No matching people</div>
+                )}
+              </div>
+            ) : null}
+          </div>
           <Button
             aria-label="Send note"
             className="h-10 w-10 p-0"
@@ -182,12 +250,63 @@ export function TaskActivityModal({ task }: TaskActivityModalProps) {
         {noteMutation.isError ? (
           <p className="mt-2 text-sm text-red-700">Could not send note.</p>
         ) : null}
+        <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
+          {people.map((person) => (
+            <button
+              key={person.id}
+              className="focus-ring rounded-full border border-line bg-white px-2 py-1 transition hover:bg-slate-50"
+              onClick={() => {
+                setMessage((current) => appendMention(current, person.name));
+                setIsMentionMenuOpen(false);
+              }}
+              type="button"
+            >
+              @{person.name}
+            </button>
+          ))}
+        </div>
       </form>
     </div>
   );
 }
 
-function ConversationEntry({ log, isOwnNote }: { log: TaskLog; isOwnNote: boolean }) {
+function appendMention(message: string, name: string) {
+  const suffix = message && !message.endsWith(" ") ? " " : "";
+  return `${message}${suffix}@${name} `;
+}
+
+function getActiveMention(message: string) {
+  const match = /(?:^|\s)@([^\s@]*)$/.exec(message);
+
+  if (!match || match.index === undefined) {
+    return null;
+  }
+
+  return {
+    start: match.index + (match[0].startsWith(" ") ? 1 : 0),
+    query: match[1]
+  };
+}
+
+function replaceActiveMention(message: string, name: string) {
+  const mention = getActiveMention(message);
+
+  if (!mention) {
+    return appendMention(message, name);
+  }
+
+  return `${message.slice(0, mention.start)}@${name} `;
+}
+
+function ConversationEntry({
+  log,
+  people,
+  isOwnNote
+}: {
+  log: TaskLog;
+  people: Person[];
+  isOwnNote: boolean;
+}) {
   if (log.type !== "NOTE") {
     return <SystemEvent log={log} />;
   }
@@ -196,7 +315,7 @@ function ConversationEntry({ log, isOwnNote }: { log: TaskLog; isOwnNote: boolea
     <article className={`flex ${isOwnNote ? "justify-end" : "justify-start"}`}>
       <div className={`max-w-[82%] ${isOwnNote ? "text-right" : "text-left"}`}>
         <div className="mb-1 text-xs text-slate-500">
-          {isOwnNote ? "You" : log.actor?.name ?? "Unknown user"} · {formatDate(log.createdAt)}
+          {isOwnNote ? "You" : log.actor?.name ?? "Unknown user"} · {formatDateTime(log.createdAt)}
         </div>
         <div
           className={`rounded-2xl px-4 py-3 text-sm shadow-sm ${
@@ -205,11 +324,45 @@ function ConversationEntry({ log, isOwnNote }: { log: TaskLog; isOwnNote: boolea
               : "rounded-bl-sm border border-line bg-slate-100 text-slate-800"
           }`}
         >
-          <p className="whitespace-pre-wrap text-left">{log.message}</p>
+          <p className="whitespace-pre-wrap text-left">
+            <HighlightedMentions message={log.message} people={people} />
+          </p>
         </div>
       </div>
     </article>
   );
+}
+
+function HighlightedMentions({ message, people }: { message: string; people: Person[] }) {
+  const names = people
+    .map((person) => person.name)
+    .sort((a, b) => b.length - a.length)
+    .map(escapeRegExp);
+  const mentionPattern = names.length
+    ? new RegExp(`(@(?:${names.join("|")}))(?=\\s|$|[,.!?;:])`, "gi")
+    : /(@\S+)/g;
+  const parts = message.split(mentionPattern);
+
+  return (
+    <>
+      {parts.map((part, index) =>
+        part.startsWith("@") ? (
+          <span
+            key={`${part}-${index}`}
+            className="rounded bg-amber-100 px-1 font-semibold text-amber-900"
+          >
+            {part}
+          </span>
+        ) : (
+          <span key={`${part}-${index}`}>{part}</span>
+        )
+      )}
+    </>
+  );
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function SystemEvent({ log }: { log: TaskLog }) {
@@ -220,8 +373,18 @@ function SystemEvent({ log }: { log: TaskLog }) {
         <span className="mx-1">·</span>
         <span>{log.message}</span>
         <span className="mx-1">·</span>
-        <span>{formatDate(log.createdAt)}</span>
+        <span>{formatDateTime(log.createdAt)}</span>
       </div>
     </div>
   );
+}
+
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(value));
 }

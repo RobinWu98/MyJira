@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchDepartments } from "../api/departments";
@@ -134,7 +134,7 @@ export function AdminPeoplePage() {
           <PersonForm
             departments={departments}
             onSubmit={async (payload) => {
-              await createAdminPerson({ ...payload, password: payload.password || "user123" });
+              await createAdminPerson({ ...payload, password: payload.password || "123456" });
               queryClient.invalidateQueries({ queryKey: ["admin-people"] });
               setIsCreateOpen(false);
             }}
@@ -197,7 +197,8 @@ function PersonForm({
   const [contactNumber, setContactNumber] = useState(person?.contactNumber ?? "");
   const [departmentId, setDepartmentId] = useState(person?.departmentId ?? 0);
   const [role, setRole] = useState<UserRole>(person?.role ?? "USER");
-  const [password, setPassword] = useState("");
+  const [password, setPassword] = useState(requirePassword ? "123456" : "");
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
 
   return (
     <form
@@ -247,7 +248,13 @@ function PersonForm({
         </select>
       </label>
       {requirePassword ? (
-        <Input label="Password" type="password" value={password} onChange={setPassword} />
+        <PasswordInput
+          isVisible={isPasswordVisible}
+          label="Password"
+          value={password}
+          onChange={setPassword}
+          onToggleVisibility={() => setIsPasswordVisible((current) => !current)}
+        />
       ) : null}
       <Button type="submit">Save Person</Button>
     </form>
@@ -256,6 +263,7 @@ function PersonForm({
 
 function ResetPasswordForm({ onSubmit }: { onSubmit: (password: string) => Promise<void> }) {
   const [password, setPassword] = useState("");
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
 
   return (
     <form
@@ -265,9 +273,51 @@ function ResetPasswordForm({ onSubmit }: { onSubmit: (password: string) => Promi
         await onSubmit(password);
       }}
     >
-      <Input label="New password" type="password" value={password} onChange={setPassword} />
+      <PasswordInput
+        isVisible={isPasswordVisible}
+        label="New password"
+        value={password}
+        onChange={setPassword}
+        onToggleVisibility={() => setIsPasswordVisible((current) => !current)}
+      />
       <Button type="submit">Reset Password</Button>
     </form>
+  );
+}
+
+function PasswordInput({
+  label,
+  value,
+  isVisible,
+  onChange,
+  onToggleVisibility
+}: {
+  label: string;
+  value: string;
+  isVisible: boolean;
+  onChange: (value: string) => void;
+  onToggleVisibility: () => void;
+}) {
+  return (
+    <label className="block">
+      <span className="text-sm font-medium">{label}</span>
+      <div className="relative mt-1">
+        <input
+          className="focus-ring w-full rounded-md border border-line px-3 py-2 pr-11"
+          type={isVisible ? "text" : "password"}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+        />
+        <button
+          aria-label={isVisible ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
+          className="focus-ring absolute right-2 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+          onClick={onToggleVisibility}
+          type="button"
+        >
+          {isVisible ? <EyeOff size={16} /> : <Eye size={16} />}
+        </button>
+      </div>
+    </label>
   );
 }
 

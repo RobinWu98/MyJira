@@ -24,12 +24,6 @@ export const priorityBadgeClasses: Record<TaskPriority, string> = {
   LOW: "bg-emerald-50 text-emerald-700 border-emerald-200"
 };
 
-export const projectStatusBadgeClasses: Record<"Empty" | "In Progress" | "Done", string> = {
-  Empty: "bg-slate-100 text-slate-700 border-slate-200",
-  "In Progress": "bg-blue-50 text-blue-700 border-blue-200",
-  Done: "bg-green-50 text-green-700 border-green-200"
-};
-
 export const statuses: TaskStatus[] = ["TODO", "IN_PROGRESS", "DONE"];
 export const priorities: TaskPriority[] = ["HIGH", "NORMAL", "LOW"];
 
