@@ -22,7 +22,3 @@ export const updatePersonSchema = z.object({
   departmentId: z.coerce.number().int().positive().optional().nullable(),
   role: userRoleSchema
 });
-
-export const resetPersonPasswordSchema = z.object({
-  password: z.string().min(6)
-});

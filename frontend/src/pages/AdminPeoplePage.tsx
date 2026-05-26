@@ -7,7 +7,6 @@ import {
   createAdminPerson,
   deleteAdminPerson,
   fetchAdminPeople,
-  resetAdminPersonPassword,
   updateAdminPerson
 } from "../api/profile";
 import { useAuth } from "../auth/AuthContext";
@@ -22,7 +21,6 @@ export function AdminPeoplePage() {
   const queryClient = useQueryClient();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingPerson, setEditingPerson] = useState<Person | null>(null);
-  const [resettingPerson, setResettingPerson] = useState<Person | null>(null);
 
   const departmentsQuery = useQuery({
     queryKey: ["departments"],
@@ -102,9 +100,6 @@ export function AdminPeoplePage() {
                           <Button variant="secondary" className="h-8 px-2" onClick={() => setEditingPerson(person)}>
                             Edit
                           </Button>
-                          <Button variant="secondary" className="h-8 px-2" onClick={() => setResettingPerson(person)}>
-                            Reset
-                          </Button>
                           <Button
                             variant="danger"
                             className="h-8 px-2"
@@ -155,17 +150,6 @@ export function AdminPeoplePage() {
                 auth.refreshUser();
               }
               setEditingPerson(null);
-            }}
-          />
-        </Modal>
-      ) : null}
-
-      {resettingPerson ? (
-        <Modal title="Reset password" onClose={() => setResettingPerson(null)}>
-          <ResetPasswordForm
-            onSubmit={async (password) => {
-              await resetAdminPersonPassword(resettingPerson.id, password);
-              setResettingPerson(null);
             }}
           />
         </Modal>
@@ -257,30 +241,6 @@ function PersonForm({
         />
       ) : null}
       <Button type="submit">Save Person</Button>
-    </form>
-  );
-}
-
-function ResetPasswordForm({ onSubmit }: { onSubmit: (password: string) => Promise<void> }) {
-  const [password, setPassword] = useState("");
-  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
-
-  return (
-    <form
-      className="space-y-4"
-      onSubmit={async (event) => {
-        event.preventDefault();
-        await onSubmit(password);
-      }}
-    >
-      <PasswordInput
-        isVisible={isPasswordVisible}
-        label="New password"
-        value={password}
-        onChange={setPassword}
-        onToggleVisibility={() => setIsPasswordVisible((current) => !current)}
-      />
-      <Button type="submit">Reset Password</Button>
     </form>
   );
 }

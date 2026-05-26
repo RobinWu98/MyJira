@@ -2,7 +2,7 @@ export type TaskStatus = "TODO" | "IN_PROGRESS" | "DONE";
 export type TaskPriority = "HIGH" | "NORMAL" | "LOW";
 export type GroupBy = "department" | "person";
 export type UserRole = "ADMIN" | "MANAGER" | "USER";
-export type TaskLogType = "TASK_CREATED" | "ASSIGNEE_CHANGED" | "PRIORITY_CHANGED" | "NOTE";
+export type TaskLogType = "TASK_CREATED" | "ASSIGNEE_CHANGED" | "PRIORITY_CHANGED" | "STATUS_CHANGED" | "NOTE";
 
 export type Department = {
   id: number;
@@ -56,6 +56,7 @@ export type ReportTask = {
   priority: TaskPriority;
   status: TaskStatus;
   startDate: string | null;
+  durationDays: number;
   createdAt: string;
   updatedAt: string;
   incompleteDurationDays: number | null;
@@ -96,4 +97,19 @@ export type TaskNotification = {
   isRead: boolean;
   createdAt: string;
   readAt: string | null;
+};
+
+export type UserNotification = {
+  id: number;
+  recipientId: number;
+  senderId: number | null;
+  message: string;
+  isRead: boolean;
+  createdAt: string;
+  readAt: string | null;
+  sender?: {
+    id: number;
+    name: string;
+    email: string;
+  } | null;
 };

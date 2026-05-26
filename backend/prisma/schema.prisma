@@ -23,6 +23,8 @@ model Person {
   tasksCreated     Task[]   @relation("TaskCreator")
   taskLogs         TaskLog[] @relation("TaskLogActor")
   taskNotifications TaskNotification[]
+  sentUserNotifications UserNotification[] @relation("UserNotificationSender")
+  receivedUserNotifications UserNotification[] @relation("UserNotificationRecipient")
 }
 
 model Department {
@@ -94,6 +96,21 @@ model TaskNotification {
   @@index([taskId, recipientId, isRead])
 }
 
+model UserNotification {
+  id          Int      @id @default(autoincrement())
+  recipientId Int
+  senderId    Int?
+  message     String
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  readAt      DateTime?
+
+  recipient Person @relation("UserNotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  sender    Person? @relation("UserNotificationSender", fields: [senderId], references: [id], onDelete: SetNull)
+
+  @@index([recipientId, isRead, createdAt])
+}
+
 enum TaskStatus {
   TODO
   IN_PROGRESS
@@ -116,5 +133,6 @@ enum TaskLogType {
   TASK_CREATED
   ASSIGNEE_CHANGED
   PRIORITY_CHANGED
+  STATUS_CHANGED
   NOTE
 }

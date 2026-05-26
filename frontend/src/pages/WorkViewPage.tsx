@@ -196,27 +196,53 @@ export function WorkViewPage() {
                 </span>
               ) : null}
             </ToolbarButton>
-            <ToolbarButton
-              active={openPopover === "filter"}
-              onClick={() => setOpenPopover((current) => (current === "filter" ? null : "filter"))}
-            >
-              <Filter size={16} />
-              Filter
-            </ToolbarButton>
-            <ToolbarButton
-              active={openPopover === "sort"}
-              onClick={() => setOpenPopover((current) => (current === "sort" ? null : "sort"))}
-            >
-              <ArrowDownUp size={16} />
-              Sort
-            </ToolbarButton>
-            <ToolbarButton
-              active={openPopover === "group"}
-              onClick={() => setOpenPopover((current) => (current === "group" ? null : "group"))}
-            >
-              <FolderKanban size={16} />
-              Group by
-            </ToolbarButton>
+            <div className="relative">
+              <ToolbarButton
+                active={openPopover === "filter"}
+                onClick={() => setOpenPopover((current) => (current === "filter" ? null : "filter"))}
+              >
+                <Filter size={16} />
+                Filter
+              </ToolbarButton>
+              {openPopover === "filter" ? (
+                <Popover title="Filter" onClose={() => setOpenPopover(null)}>
+                  <FilterContent
+                    filters={filters}
+                    departments={departments}
+                    people={people}
+                    onChange={setFilters}
+                  />
+                </Popover>
+              ) : null}
+            </div>
+            <div className="relative">
+              <ToolbarButton
+                active={openPopover === "sort"}
+                onClick={() => setOpenPopover((current) => (current === "sort" ? null : "sort"))}
+              >
+                <ArrowDownUp size={16} />
+                Sort
+              </ToolbarButton>
+              {openPopover === "sort" ? (
+                <Popover title="Sort" onClose={() => setOpenPopover(null)}>
+                  <SortContent filters={filters} onChange={setFilters} />
+                </Popover>
+              ) : null}
+            </div>
+            <div className="relative">
+              <ToolbarButton
+                active={openPopover === "group"}
+                onClick={() => setOpenPopover((current) => (current === "group" ? null : "group"))}
+              >
+                <FolderKanban size={16} />
+                Group by
+              </ToolbarButton>
+              {openPopover === "group" ? (
+                <Popover title="Group by" onClose={() => setOpenPopover(null)}>
+                  <GroupContent filters={filters} onChange={setFilters} />
+                </Popover>
+              ) : null}
+            </div>
             <Button
               variant="ghost"
               onClick={() => {
@@ -230,28 +256,6 @@ export function WorkViewPage() {
               Reset
             </Button>
 
-            {openPopover === "filter" ? (
-              <Popover title="Filter" onClose={() => setOpenPopover(null)}>
-                <FilterContent
-                  filters={filters}
-                  departments={departments}
-                  people={people}
-                  onChange={setFilters}
-                />
-              </Popover>
-            ) : null}
-
-            {openPopover === "sort" ? (
-              <Popover title="Sort" onClose={() => setOpenPopover(null)}>
-                <SortContent filters={filters} onChange={setFilters} />
-              </Popover>
-            ) : null}
-
-            {openPopover === "group" ? (
-              <Popover title="Group by" onClose={() => setOpenPopover(null)}>
-                <GroupContent filters={filters} onChange={setFilters} />
-              </Popover>
-            ) : null}
           </div>
         </header>
 
@@ -792,7 +796,7 @@ function TaskTable({
         </colgroup>
         <thead className="bg-slate-50 text-xs uppercase text-slate-500">
           <tr>
-            <th className="px-4 py-3 font-semibold">Task</th>
+            <th className="px-4 py-3 pl-14 text-left font-semibold">Task</th>
             {compactGroup !== "department" ? (
               <th className="px-4 py-3 font-semibold">Department</th>
             ) : null}
@@ -806,8 +810,8 @@ function TaskTable({
         <tbody className="divide-y divide-line">
           {tasks.length ? tasks.map((task) => (
             <tr key={task.id} className="h-16">
-              <td className="px-4 py-3 text-center font-medium">
-                <div className="flex min-w-0 items-center justify-center gap-2">
+              <td className="px-4 py-3 text-left font-medium">
+                <div className="flex min-w-0 items-center justify-start gap-2">
                   {canEditReportTask(task, currentUser) ? (
                     <button
                       aria-label={`Edit ${task.title}`}
@@ -818,9 +822,11 @@ function TaskTable({
                     >
                       <Pencil size={15} />
                     </button>
-                  ) : null}
+                  ) : (
+                    <span aria-hidden="true" className="inline-flex h-8 w-8 shrink-0" />
+                  )}
                   <button
-                    className="focus-ring block min-w-0 truncate rounded-sm text-brand hover:underline"
+                    className="focus-ring block min-w-0 truncate rounded-sm text-center text-brand hover:underline"
                     onClick={() => onOpenTask(task.id)}
                     title={task.title}
                     type="button"
@@ -861,15 +867,21 @@ function TaskTable({
               <td className="px-4 py-3 text-slate-600">
                 {task.startDate ? formatDate(task.startDate) : "No start date"}
               </td>
-              <td className="px-4 py-3 text-slate-600">
-                {task.incompleteDurationDays === null
-                  ? "Complete"
-                  : `${task.incompleteDurationDays} days`}
+              <td className="px-4 py-3">
+                <span
+                  className={
+                    task.status === "DONE"
+                      ? "rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-emerald-700"
+                      : "text-slate-600"
+                  }
+                >
+                  {task.durationDays} days
+                </span>
               </td>
             </tr>
           )) : (
             <tr className="h-16">
-              <td className="px-4 py-3 text-center font-medium text-slate-500">
+              <td className="px-4 py-3 text-left font-medium text-slate-500">
                 {emptyTaskLabel}
               </td>
               {compactGroup !== "department" ? (

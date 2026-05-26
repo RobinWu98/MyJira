@@ -65,10 +65,3 @@ export function deleteAdminPerson(personId: number) {
     method: "DELETE"
   });
 }
-
-export function resetAdminPersonPassword(personId: number, password: string) {
-  return apiRequest<{ message: string }>(`/admin/people/${personId}/password`, {
-    method: "PATCH",
-    body: JSON.stringify({ password })
-  });
-}

@@ -79,6 +79,13 @@ function formatPriorityLabel(priority: TaskPriority) {
   return priority.charAt(0) + priority.slice(1).toLowerCase();
 }
 
+function formatStatusLabel(status: TaskStatus) {
+  return status
+    .split("_")
+    .map((part) => part.charAt(0) + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
 async function getActorName(actorId?: number) {
   if (!actorId) {
     return null;
@@ -322,6 +329,21 @@ export async function updateTask(
       });
     }
 
+    if (taskInput.status && taskInput.status !== existing.status) {
+      await tx.taskLog.create({
+        data: {
+          taskId,
+          actorId: actor?.id,
+          type: "STATUS_CHANGED" as any,
+          message: `${formatActorName(actorName)} changed status from ${formatStatusLabel(existing.status)} to ${formatStatusLabel(taskInput.status)}.`,
+          metadata: {
+            fromStatus: existing.status,
+            toStatus: taskInput.status
+          }
+        }
+      });
+    }
+
     const task = await tx.task.findUnique({
       where: { id: taskId },
       include: taskInclude
@@ -351,6 +373,17 @@ function addEndOfDay(date: Date) {
   return next;
 }
 
+function getDurationDays(task: {
+  status: TaskStatus;
+  startDate: Date | null;
+  createdAt: Date;
+  completedAt: Date | null;
+}) {
+  const start = task.startDate ?? task.createdAt;
+  const end = task.status === "DONE" && task.completedAt ? task.completedAt : new Date();
+  return Math.max(0, Math.floor((end.getTime() - start.getTime()) / 86_400_000));
+}
+
 function getIncompleteDurationDays(task: { status: TaskStatus; startDate: Date | null; createdAt: Date }) {
   if (task.status === "DONE") {
     return null;
@@ -372,8 +405,10 @@ type ReportTask = {
   priority: TaskPriority;
   status: TaskStatus;
   startDate: Date | null;
+  completedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+  durationDays: number;
   incompleteDurationDays: number | null;
 };
 
@@ -439,8 +474,10 @@ async function listReportTasks(query: ReportQuery, viewerId?: number): Promise<R
       priority: task.priority,
       status: task.status,
       startDate: task.startDate,
+      completedAt: task.completedAt,
       createdAt: task.createdAt,
       updatedAt: task.updatedAt,
+      durationDays: getDurationDays(task),
       incompleteDurationDays: getIncompleteDurationDays(task)
     }))
     .filter((task) => {
@@ -490,9 +527,9 @@ function sortReportTasks(tasks: ReportTask[], sort?: string) {
       } else if (rule === "startDate_desc") {
         result = compareDate(a.startDate ?? a.createdAt, b.startDate ?? b.createdAt, "desc");
       } else if (rule === "duration_desc") {
-        result = compareNumber(a.incompleteDurationDays, b.incompleteDurationDays, "desc");
+        result = compareNumber(a.durationDays, b.durationDays, "desc");
       } else if (rule === "duration_asc") {
-        result = compareNumber(a.incompleteDurationDays, b.incompleteDurationDays, "asc");
+        result = compareNumber(a.durationDays, b.durationDays, "asc");
       } else if (rule === "updatedAt_desc") {
         result = compareDate(a.updatedAt, b.updatedAt, "desc");
       }

@@ -62,3 +62,40 @@ profileRouter.patch("/password", async (req, res, next) => {
     next(error);
   }
 });
+
+profileRouter.get("/notifications", async (req, res, next) => {
+  try {
+    const notifications = await (prisma as any).userNotification.findMany({
+      where: { recipientId: req.user!.id },
+      orderBy: { createdAt: "desc" },
+      include: {
+        sender: {
+          select: { id: true, name: true, email: true }
+        }
+      }
+    });
+
+    res.json(notifications);
+  } catch (error) {
+    next(error);
+  }
+});
+
+profileRouter.patch("/notifications/read", async (req, res, next) => {
+  try {
+    await (prisma as any).userNotification.updateMany({
+      where: {
+        recipientId: req.user!.id,
+        isRead: false
+      },
+      data: {
+        isRead: true,
+        readAt: new Date()
+      }
+    });
+
+    res.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+});

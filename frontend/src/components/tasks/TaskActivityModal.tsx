@@ -29,6 +29,7 @@ const activityLabels: Record<TaskLogType, string> = {
   TASK_CREATED: "Created",
   ASSIGNEE_CHANGED: "Assignee",
   PRIORITY_CHANGED: "Priority",
+  STATUS_CHANGED: "Status",
   NOTE: "Note"
 };
 
@@ -233,7 +234,7 @@ export function TaskActivityModal({ task, people }: TaskActivityModalProps) {
         )}
       </section>
 
-      <form className="sticky bottom-0 shrink-0 border-t border-line bg-white pt-4" onSubmit={handleSubmit}>
+      <form className="shrink-0 border-t border-line bg-white pt-4" onSubmit={handleSubmit}>
         <div className="relative flex items-end gap-2">
           <div className="relative flex-1">
             <textarea
@@ -285,21 +286,6 @@ export function TaskActivityModal({ task, people }: TaskActivityModalProps) {
         {noteMutation.isError ? (
           <p className="mt-2 text-sm text-red-700">Could not send note.</p>
         ) : null}
-        <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
-          {people.map((person) => (
-            <button
-              key={person.id}
-              className="focus-ring rounded-full border border-line bg-white px-2 py-1 transition hover:bg-slate-50"
-              onClick={() => {
-                setMessage((current) => appendMention(current, person.name));
-                setIsMentionMenuOpen(false);
-              }}
-              type="button"
-            >
-              @{person.name}
-            </button>
-          ))}
-        </div>
       </form>
     </div>
   );

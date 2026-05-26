@@ -7,7 +7,6 @@ import { toPersonResponse } from "../../utils/person-response.js";
 import {
   createPersonSchema,
   personIdParamsSchema,
-  resetPersonPasswordSchema,
   updatePersonSchema
 } from "./people.schemas.js";
 
@@ -98,23 +97,6 @@ adminPeopleRouter.delete("/:personId", async (req, res, next) => {
 
     await prisma.person.delete({ where: { id: personId } });
     res.status(204).send();
-  } catch (error) {
-    next(error);
-  }
-});
-
-adminPeopleRouter.patch("/:personId/password", async (req, res, next) => {
-  try {
-    const { personId } = personIdParamsSchema.parse(req.params);
-    const input = resetPersonPasswordSchema.parse(req.body);
-    const passwordHash = await bcrypt.hash(input.password, 10);
-
-    await prisma.person.update({
-      where: { id: personId },
-      data: { passwordHash }
-    });
-
-    res.json({ message: "Password reset" });
   } catch (error) {
     next(error);
   }
