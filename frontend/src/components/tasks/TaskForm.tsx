@@ -3,6 +3,9 @@ import type { Department, Person, Task, TaskPriority, TaskStatus } from "../../t
 import { formatDateInput, priorities, priorityLabels, statuses, statusLabels } from "../../utils/labels";
 import { Button } from "../ui/Button";
 
+const TITLE_WORD_LIMIT = 50;
+const DESCRIPTION_WORD_LIMIT = 500;
+
 type TaskFormProps = {
   people: Person[];
   departments: Department[];
@@ -35,6 +38,10 @@ export function TaskForm({
   const [status, setStatus] = useState<TaskStatus>(task?.status ?? "TODO");
   const [priority, setPriority] = useState<TaskPriority>(task?.priority ?? "NORMAL");
   const [startDate, setStartDate] = useState(formatDateInput(task?.startDate));
+  const titleWordCount = countWords(title);
+  const descriptionWordCount = countWords(description);
+  const isOverLimit =
+    titleWordCount > TITLE_WORD_LIMIT || descriptionWordCount > DESCRIPTION_WORD_LIMIT;
 
   return (
     <form
@@ -42,7 +49,7 @@ export function TaskForm({
       onSubmit={(event) => {
         event.preventDefault();
         onSubmit({
-          title,
+          title: limitWords(title, TITLE_WORD_LIMIT),
           description: description.trim() || null,
           departmentId: departmentId || null,
           assignedPersonId: assignedPersonId || null,
@@ -57,9 +64,12 @@ export function TaskForm({
         <input
           className="focus-ring mt-1 w-full rounded-md border border-line px-3 py-2"
           value={title}
-          onChange={(event) => setTitle(event.target.value)}
+          onChange={(event) => setTitle(limitWords(event.target.value, TITLE_WORD_LIMIT))}
           required
         />
+        <span className="mt-1 block text-xs text-slate-500">
+          {titleWordCount}/{TITLE_WORD_LIMIT} words
+        </span>
       </label>
 
       <label className="block">
@@ -67,8 +77,11 @@ export function TaskForm({
         <textarea
           className="focus-ring mt-1 min-h-24 w-full rounded-md border border-line px-3 py-2"
           value={description}
-          onChange={(event) => setDescription(event.target.value)}
+          onChange={(event) => setDescription(limitWords(event.target.value, DESCRIPTION_WORD_LIMIT))}
         />
+        <span className="mt-1 block text-xs text-slate-500">
+          {descriptionWordCount}/{DESCRIPTION_WORD_LIMIT} words
+        </span>
       </label>
 
       <div className="space-y-4">
@@ -147,10 +160,24 @@ export function TaskForm({
       </div>
 
       <div className="flex justify-end">
-        <Button type="submit" disabled={isSubmitting}>
+        <Button type="submit" disabled={isSubmitting || isOverLimit}>
           {task ? "Save Task" : "Create Task"}
         </Button>
       </div>
     </form>
   );
+}
+
+function countWords(value: string) {
+  return value.trim().split(/\s+/).filter(Boolean).length;
+}
+
+function limitWords(value: string, limit: number) {
+  const words = value.trim().split(/\s+/).filter(Boolean);
+
+  if (words.length <= limit) {
+    return value;
+  }
+
+  return words.slice(0, limit).join(" ");
 }

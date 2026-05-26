@@ -9,10 +9,11 @@ import {
   updateTask
 } from "../../api/tasks";
 import { useAuth } from "../../auth/AuthContext";
-import type { Person, Task, TaskLog, TaskLogType, TaskStatus } from "../../types";
+import type { Person, Task, TaskLog, TaskLogType, TaskPriority, TaskStatus } from "../../types";
 import {
   priorityBadgeClasses,
   priorityLabels,
+  priorities,
   statusBadgeClasses,
   statuses,
   statusLabels
@@ -49,8 +50,12 @@ export function TaskActivityModal({ task, people }: TaskActivityModalProps) {
   });
 
   const conversationLogs = useMemo(() => [...(logsQuery.data ?? [])].reverse(), [logsQuery.data]);
-  const canChangeStatus =
-    Boolean(user) && (user?.id === task.assignedPersonId || user?.id === task.createdByPersonId);
+  const canEditCondition =
+    Boolean(user) &&
+    (user?.role === "ADMIN" ||
+      user?.role === "MANAGER" ||
+      user?.id === task.assignedPersonId ||
+      user?.id === task.createdByPersonId);
 
   const noteMutation = useMutation({
     mutationFn: () => createTaskNote(task.id, message),
@@ -71,6 +76,13 @@ export function TaskActivityModal({ task, people }: TaskActivityModalProps) {
 
   const statusMutation = useMutation({
     mutationFn: (status: TaskStatus) => updateTask(task.id, { status, version: task.version }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tasks", task.id] });
+      queryClient.invalidateQueries({ queryKey: ["task-report"] });
+    }
+  });
+  const priorityMutation = useMutation({
+    mutationFn: (priority: TaskPriority) => updateTask(task.id, { priority, version: task.version }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tasks", task.id] });
       queryClient.invalidateQueries({ queryKey: ["task-report"] });
@@ -117,31 +129,55 @@ export function TaskActivityModal({ task, people }: TaskActivityModalProps) {
   return (
     <div className="flex min-h-[calc(85vh-6rem)] flex-col">
       <section className="shrink-0 border-b border-line pb-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h3 className="text-xl font-semibold">{task.title}</h3>
-            {task.description ? (
-              <p className="mt-1 line-clamp-2 text-sm text-slate-600">{task.description}</p>
-            ) : null}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <span className={`inline-flex rounded-full border px-2 py-1 text-xs font-medium ${priorityBadgeClasses[task.priority]}`}>
+        <div className="max-h-56 overflow-y-auto pr-1">
+          <h3 className="break-words text-xl font-semibold">{task.title}</h3>
+          {task.description ? (
+            <p className="mt-2 whitespace-pre-wrap break-words text-sm text-slate-600">{task.description}</p>
+          ) : null}
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-600">
+          <span className="rounded-full bg-slate-100 px-2 py-1">
+            {task.assignedPerson?.name ?? "Unassigned"}
+          </span>
+          <span className="rounded-full bg-slate-100 px-2 py-1">
+            {task.department?.name ?? "No department"}
+          </span>
+          {canEditCondition ? (
+            <label className="inline-flex items-center gap-2">
+              <span className={`rounded-full border px-2 py-1 font-medium ${priorityBadgeClasses[task.priority]}`}>
+                Priority
+              </span>
+              <select
+                className={`focus-ring h-8 rounded-md border px-2 text-xs font-medium disabled:bg-slate-50 ${priorityBadgeClasses[task.priority]}`}
+                disabled={priorityMutation.isPending}
+                value={task.priority}
+                onChange={(event) => priorityMutation.mutate(event.target.value as TaskPriority)}
+                title="Change task priority"
+              >
+                {priorities.map((priority) => (
+                  <option key={priority} value={priority}>
+                    {priorityLabels[priority]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            <span className={`inline-flex rounded-full border px-2 py-1 font-medium ${priorityBadgeClasses[task.priority]}`}>
               {priorityLabels[task.priority]}
             </span>
+          )}
+          {canEditCondition ? (
             <label className="inline-flex items-center gap-2">
-              <span className={`rounded-full border px-2 py-1 text-xs font-medium ${statusBadgeClasses[task.status]}`}>
+              <span className={`rounded-full border px-2 py-1 font-medium ${statusBadgeClasses[task.status]}`}>
                 Status
               </span>
               <select
-                className="focus-ring h-8 rounded-md border border-line bg-white px-2 text-xs disabled:bg-slate-50 disabled:text-slate-500"
-                disabled={!canChangeStatus || statusMutation.isPending}
+                className={`focus-ring h-8 rounded-md border px-2 text-xs font-medium disabled:bg-slate-50 ${statusBadgeClasses[task.status]}`}
+                disabled={statusMutation.isPending}
                 value={task.status}
                 onChange={(event) => statusMutation.mutate(event.target.value as TaskStatus)}
-                title={
-                  canChangeStatus
-                    ? "Change task status"
-                    : "Only the task creator or assigned person can change status"
-                }
+                title="Change task status"
               >
                 {statuses.map((status) => (
                   <option key={status} value={status}>
@@ -150,24 +186,23 @@ export function TaskActivityModal({ task, people }: TaskActivityModalProps) {
                 ))}
               </select>
             </label>
-          </div>
+          ) : (
+            <span className={`inline-flex rounded-full border px-2 py-1 font-medium ${statusBadgeClasses[task.status]}`}>
+              {statusLabels[task.status]}
+            </span>
+          )}
         </div>
-        {!canChangeStatus ? (
+        {!canEditCondition ? (
           <p className="mt-2 text-xs text-slate-500">
-            Only the task creator or assigned person can change status.
+            Only admins, managers, the task creator, or assigned person can change priority and status.
           </p>
         ) : null}
         {statusMutation.isError ? (
           <p className="mt-2 text-xs text-red-700">Could not update status.</p>
         ) : null}
-        <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-600">
-          <span className="rounded-full bg-slate-100 px-2 py-1">
-            {task.assignedPerson?.name ?? "Unassigned"}
-          </span>
-          <span className="rounded-full bg-slate-100 px-2 py-1">
-            {task.department?.name ?? "No department"}
-          </span>
-        </div>
+        {priorityMutation.isError ? (
+          <p className="mt-2 text-xs text-red-700">Could not update priority.</p>
+        ) : null}
       </section>
 
       <section className="min-h-0 flex-1 overflow-y-auto py-4">

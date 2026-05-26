@@ -7,9 +7,26 @@ export const taskIdParamsSchema = z.object({
 export const taskStatusSchema = z.enum(["TODO", "IN_PROGRESS", "DONE"]);
 export const taskPrioritySchema = z.enum(["HIGH", "NORMAL", "LOW"]);
 
+function maxWords(limit: number, fieldName: string) {
+  return (value: string | null | undefined, ctx: z.RefinementCtx) => {
+    if (!value) {
+      return;
+    }
+
+    const wordCount = value.trim().split(/\s+/).filter(Boolean).length;
+
+    if (wordCount > limit) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `${fieldName} must be ${limit} words or fewer`
+      });
+    }
+  };
+}
+
 export const createTaskSchema = z.object({
-  title: z.string().trim().min(1, "Task title is required"),
-  description: z.string().trim().optional().nullable(),
+  title: z.string().trim().min(1, "Task title is required").superRefine(maxWords(50, "Task title")),
+  description: z.string().trim().optional().nullable().superRefine(maxWords(500, "Description")),
   departmentId: z.coerce.number().int().positive().optional().nullable(),
   assignedPersonId: z.coerce.number().int().positive().optional().nullable(),
   status: taskStatusSchema.default("TODO"),
@@ -19,8 +36,8 @@ export const createTaskSchema = z.object({
 
 export const updateTaskSchema = z.object({
   version: z.coerce.number().int().positive(),
-  title: z.string().trim().min(1, "Task title is required").optional(),
-  description: z.string().trim().optional().nullable(),
+  title: z.string().trim().min(1, "Task title is required").superRefine(maxWords(50, "Task title")).optional(),
+  description: z.string().trim().optional().nullable().superRefine(maxWords(500, "Description")),
   departmentId: z.coerce.number().int().positive().optional().nullable(),
   assignedPersonId: z.coerce.number().int().positive().optional().nullable(),
   status: taskStatusSchema.optional(),

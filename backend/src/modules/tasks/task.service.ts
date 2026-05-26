@@ -237,10 +237,13 @@ export async function updateTask(
   if (input.status && input.status !== existing.status) {
     const canChangeStatus =
       Boolean(actor) &&
-      (actor?.id === existing.assignedPersonId || actor?.id === creatorId);
+      (actor?.role === "ADMIN" ||
+        actor?.role === "MANAGER" ||
+        actor?.id === existing.assignedPersonId ||
+        actor?.id === creatorId);
 
     if (!canChangeStatus) {
-      throw new ForbiddenError("Only the task creator or assigned person can change task status");
+      throw new ForbiddenError("Only admins, managers, the task creator, or assigned person can change task status");
     }
   }
 
